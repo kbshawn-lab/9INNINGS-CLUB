@@ -40,9 +40,10 @@ app.get('/', async (req, res) => {
     const sheetList = metaData.data.sheets.map(s => s.properties.title);
     const targetSheet = currentSheet || sheetList[0];
 
-    // 判斷是否為「輸入資料」分頁或「分析表」分頁
+    // 判斷分頁類型
     const isInputSheet = targetSheet.includes("輸入資料");
     const isAnalysisSheet = targetSheet.includes("分析表");
+    const isTotalSheet = targetSheet.includes("總紀錄");
 
     // 抓取該分頁資料 (範圍 A1:Z100)
     const response = await sheets.spreadsheets.values.get({
@@ -60,14 +61,16 @@ app.get('/', async (req, res) => {
       return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 5px 10px; font-size: 12px; border-radius: 4px; ${activeStyle}">${name}</a>`;
     }).join(' ');
 
-    // 根據分頁類型設定字體與縮放（輸入資料分頁縮小為 80%）
-    const tableFontSize = isInputSheet ? '8.8px' : '11px';
-    const inputPadding = isInputSheet ? '1px 1px' : '2px 1px';
-    const thPadding = isInputSheet ? '4px 3px' : '6px 4px';
-    const minInputWidth = isInputSheet ? '44px' : '55px';
+    // 統一表格字體與外觀縮小 80% (輸入資料、分析表、總紀錄全套用)
+    const tableFontSize = '8.8px';
+    const inputPadding = '1px 1px';
+    const thPadding = '4px 3px';
+    const minInputWidth = '44px';
 
-    // 左側 3 欄固定的寬度偏移（適用於輸入資料分頁）
-    const colOffsets = [0, 50, 100]; // 可依據實際 A, B, C 欄寬調整像素
+    // 左側 3 欄固定的寬度偏移（px）
+    const colOffsets = [0, 50, 100]; 
+    // 頂端 3 列固定的高度偏移（px）
+    const rowOffsets = [0, 24, 48];
 
     let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 700px; border-collapse: separate; border-spacing: 0; font-family: Arial, sans-serif; font-size: ${tableFontSize};">`;
     
@@ -82,23 +85,26 @@ app.get('/', async (req, res) => {
       row.forEach((val, colIndex) => {
         const cellValue = val || '';
         
-        // 判斷是否屬於「輸入資料分頁」且為「前 3 欄 (Index 0, 1, 2)」
-        const isStickyCol = isInputSheet && colIndex < 3;
-        
+        // 判斷是否鎖定欄列
+        const isStickyCol = (isInputSheet || isTotalSheet) && colIndex < 3;
+        const isStickyRow = (isTotalSheet && rowIndex < 3) || (!isTotalSheet && rowIndex === 0);
+
         let stickyCss = '';
-        if (rowIndex === 0 && isStickyCol) {
-          // 左上角交會區（第 1 列 + 前 3 欄）：同時固定最頂端與最左側
-          stickyCss = `position: sticky; top: 0; left: ${colOffsets[colIndex]}px; z-index: 40; background-color: #002244; color: white;`;
-        } else if (rowIndex === 0) {
-          // 第 1 列非前 3 欄：僅固定頂端
-          stickyCss = `position: sticky; top: 0; z-index: 20; background-color: #003366; color: white;`;
+        if (isStickyRow && isStickyCol) {
+          // 欄與列的交會區塊（頂端與左側雙向固定）
+          const topOffset = isTotalSheet ? rowOffsets[rowIndex] : 0;
+          stickyCss = `position: sticky; top: ${topOffset}px; left: ${colOffsets[colIndex]}px; z-index: 50; background-color: #002244; color: white;`;
+        } else if (isStickyRow) {
+          // 僅固定頂端列
+          const topOffset = isTotalSheet ? rowOffsets[rowIndex] : 0;
+          stickyCss = `position: sticky; top: ${topOffset}px; z-index: 20; background-color: #003366; color: white;`;
         } else if (isStickyCol) {
-          // 前 3 欄非第 1 列：僅固定左側
+          // 僅固定左側欄
           stickyCss = `position: sticky; left: ${colOffsets[colIndex]}px; z-index: 10; background-color: ${bgColor};`;
         }
 
         if (rowIndex === 0) {
-          // 標題列
+          // 第一列 (標題列)
           const headerText = (isAnalysisSheet && colIndex === 24) ? `(Y欄) ${cellValue}` : cellValue;
           tableHtml += `<th style="padding: ${thPadding}; border: 1px solid #ccc; font-size: ${tableFontSize}; white-space: nowrap; ${stickyCss}">${headerText}</th>`;
         } else {
