@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 
-// 試算表 ID
+// 你的 Google 試算表 ID
 const SPREADSHEET_ID = '1vCOUP980-AfHL67Duma6h6aqq2YEuBmsV0MfeHsS1Qc';
 
 // 從 Railway 環境變數讀取憑證
@@ -16,12 +16,11 @@ try {
   const credsEnv = process.env.GOOGLE_CREDENTIALS;
   credentials = typeof credsEnv === 'string' ? JSON.parse(credsEnv) : credsEnv;
   
-  // 處理私鑰可能發生的換行符號問題
   if (credentials && credentials.private_key) {
     credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
   }
 } catch (error) {
-  console.error("解析 GOOGLE_CREDENTIALS 失敗，請檢查 Railway 的 Variables 設定！", error);
+  console.error("憑證解析失敗：", error);
 }
 
 const auth = new google.auth.GoogleAuth({
@@ -36,14 +35,14 @@ app.get('/', (req, res) => {
 app.get('/api/sheets', async (req, res) => {
   try {
     if (!credentials) {
-      return res.status(500).json({ success: false, error: '未讀取到 Google 憑證，請檢查 Railway 環境變數。' });
+      return res.status(500).json({ success: false, error: '未偵測到 GOOGLE_CREDENTIALS 環境變數！' });
     }
 
     const sheets = google.sheets({ version: 'v4', auth });
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'Sheet1!A1:Z100', // ⚠️ 如果試算表分頁名稱不是 Sheet1，請改成你的分頁名稱（例如「工作表1」）
+      range: 'Sheet1!A1:Z100', // ⚠️ 若試算表分頁非 Sheet1，請改成你的分頁名稱
     });
 
     const rows = response.data.values;
@@ -67,5 +66,5 @@ app.get('/api/sheets', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
