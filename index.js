@@ -28,7 +28,7 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-// 🌐 1. 首頁：5 列一組交替色塊網頁
+// 🌐 1. 首頁：手機版最佳化 (支援橫向滑動與自動寬度)
 app.get('/', async (req, res) => {
   const currentSheet = req.query.sheet || '';
 
@@ -58,22 +58,19 @@ app.get('/', async (req, res) => {
       return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 8px 16px; border-radius: 6px; ${activeStyle}">${name}</a>`;
     }).join(' ');
 
-    // 產生表格 HTML
-    let tableHtml = `<table id="dataTable" style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif;">`;
+    // 產生表格 HTML (加入 min-width 確保手機顯示不擠壓)
+    let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 900px; border-collapse: collapse; font-family: Arial, sans-serif;">`;
     
-    // 標題列 (固定深藍色)
+    // 標題列
     tableHtml += `<tr style="background-color: #003366; color: white;">`;
     headers.forEach(h => {
-      tableHtml += `<th style="padding: 10px; border: 1px solid #ccc;">${h}</th>`;
+      tableHtml += `<th style="padding: 10px 8px; border: 1px solid #ccc; font-size: 14px; white-space: nowrap;">${h}</th>`;
     });
     tableHtml += `</tr>`;
     
-    // 資料列：每 5 列為一個色塊模組
+    // 資料列：5 列一組色塊模組
     dataRows.forEach((row, rowIndex) => {
-      // 計算第幾個 5 列色塊組：0~4 列為第 0 組、5~9 列為第 1 組...
       const blockIndex = Math.floor(rowIndex / 5);
-      
-      // 偶數組用白色 (#ffffff)，奇數組用淡藍灰色 (#edf2f7)，呈現 5 列一組的區塊感
       const bgColor = blockIndex % 2 === 0 ? '#ffffff' : '#edf2f7';
       const inputBgColor = blockIndex % 2 === 0 ? '#fafafa' : '#e2e8f0';
 
@@ -83,7 +80,7 @@ app.get('/', async (req, res) => {
         const val = row[colIndex] || '';
         tableHtml += `
           <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: center;">
-            <input type="text" class="cell-input" value="${val}" style="width: 90%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; background-color: ${inputBgColor};" />
+            <input type="text" class="cell-input" value="${val}" style="width: 95%; min-width: 110px; padding: 6px 4px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-size: 14px; background-color: ${inputBgColor};" />
           </td>`;
       });
       tableHtml += `</tr>`;
@@ -95,22 +92,22 @@ app.get('/', async (req, res) => {
       <html lang="zh-TW">
       <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <title>9INNINGS CLUB 俱樂部數據分析表</title>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background-color: #f4f6f9; margin: 0; }
-          .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-          .title { color: #003366; margin: 0; }
-          .save-btn { background-color: #28a745; color: white; font-size: 16px; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 12px; background-color: #f4f6f9; margin: 0; }
+          .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+          .title { color: #003366; margin: 0; font-size: 20px; }
+          .save-btn { background-color: #28a745; color: white; font-size: 15px; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
           .save-btn:hover { background-color: #218838; }
-          .nav-container { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-          .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }
+          .nav-container { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 6px; white-space: nowrap; }
+          .card { background: white; padding: 12px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; -webkit-overflow-scrolling: touch; }
           .cell-input:focus { background-color: #fff !important; border-color: #003366 !important; outline: none; box-shadow: 0 0 4px rgba(0,51,102,0.4); }
         </style>
       </head>
       <body>
         <div class="header-container">
-          <h1 class="title">⚾ 9INNINGS CLUB 俱樂部數據分析表</h1>
+          <h1 class="title">⚾ 9INNINGS CLUB 戰績表</h1>
           <button class="save-btn" onclick="saveData()">💾 儲存修改</button>
         </div>
         
@@ -119,7 +116,7 @@ app.get('/', async (req, res) => {
           ${navTabsHtml}
         </div>
 
-        <!-- 數據表格 -->
+        <!-- 數據表格 (支援手機橫向滑動) -->
         <div class="card">
           ${tableHtml}
         </div>
