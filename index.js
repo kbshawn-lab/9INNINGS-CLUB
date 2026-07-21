@@ -28,29 +28,67 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
 });
 
-app.get('/', (req, res) => {
-  res.send('9INNINGS-CLUB API Server 運作中！請存取 /api/sheets 取得資料。');
+// 取得試算表原始資料的函式
+async function getSheetData() {
+  const sheets = google.sheets({ version: 'v4', auth });
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: 'A1:Z100',
+  });
+  return response.data.values || [];
+}
+
+// 🌐 1. 直接用瀏覽器開啟時，呈現漂亮的 HTML 表格
+app.get('/', async (req, res) => {
+  try {
+    const rows = await getSheetData();
+    if (!rows.length) return res.send('<h2>試算表無資料</h2>');
+
+    const headers = rows[0];
+    const dataRows = rows.slice(1);
+
+    // 產生 HTML 表格
+    let tableHtml = `<table border="1" style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif;">`;
+    tableHtml += `<tr style="background-color: #003366; color: white;">${headers.map(h => `<th style="padding: 10px;">${h}</th>`).join('')}</tr>`;
+    
+    dataRows.forEach((row, rowIndex) => {
+      const bgColor = rowIndex % 2 === 0 ? '#f9f9f9' : '#ffffff';
+      tableHtml += `<tr style="background-color: ${bgColor};">`;
+      headers.forEach((_, colIndex) => {
+        tableHtml += `<style>td { padding: 8px; text-align: center; }</style><td>${row[colIndex] || ''}</td>`;
+      });
+      tableHtml += `</tr>`;
+    });
+    tableHtml += `</table>`;
+
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>9INNINGS CLUB 戰績分析表</title>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: sans-serif; padding: 20px; background-color: #f4f6f9; }
+          h1 { color: #003366; text-align: center; }
+          .container { overflow-x: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        </style>
+      </head>
+      <body>
+        <h1>⚾ 9INNINGS CLUB 俱樂部分析表</h1>
+        <div class="container">${tableHtml}</div>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    res.status(500).send(`伺服器錯誤: ${error.message}`);
+  }
 });
 
+// 📡 2. 保留 JSON API 供其他網頁/程式串接
 app.get('/api/sheets', async (req, res) => {
   try {
-    if (!credentials) {
-      return res.status(500).json({ success: false, error: '未偵測到 GOOGLE_CREDENTIALS 環境變數！' });
-    }
-
-    const sheets = google.sheets({ version: 'v4', auth });
-
-    // 💡 點擊你的 Google 試算表最下方分頁，確認分頁名稱（例如「工作表1」或「Sheet1」）
-    // 如果不指定分頁名稱，直接寫 'A1:Z100'，Google API 會預設讀取第一個分頁！
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'A1:Z100', // 直接寫 A1:Z100，會自動讀取第一個分頁
-    });
-
-    const rows = response.data.values;
-    if (!rows || rows.length === 0) {
-      return res.status(404).json({ success: false, message: '試算表無資料' });
-    }
+    const rows = await getSheetData();
+    if (!rows.length) return res.status(404).json({ success: false, message: '無資料' });
 
     const headers = rows[0];
     const data = rows.slice(1).map(row => {
