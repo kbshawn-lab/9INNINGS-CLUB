@@ -3,7 +3,7 @@ const { google } = require('googleapis');
 const cors = require('cors');
 
 const app = express();
-const PORT = process process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000; // 修正了這裡的語法錯誤
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -116,7 +116,7 @@ app.get('/', async (req, res) => {
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 0 6px 12px 6px; background-color: #f4f6f9; margin: 0; }
           
-          /* 📌 頂部固定區塊（緊湊化） */
+          /* 📌 頂部固定區塊 */
           .sticky-top-bar {
             position: sticky;
             top: 0;
