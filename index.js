@@ -28,7 +28,7 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-// 🌐 1. 首頁：手機版最佳化 (支援橫向滑動與自動寬度)
+// 🌐 1. 首頁：支援「頂部固定儲存按鈕」與手機最佳化
 app.get('/', async (req, res) => {
   const currentSheet = req.query.sheet || '';
 
@@ -58,7 +58,7 @@ app.get('/', async (req, res) => {
       return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 8px 16px; border-radius: 6px; ${activeStyle}">${name}</a>`;
     }).join(' ');
 
-    // 產生表格 HTML (加入 min-width 確保手機顯示不擠壓)
+    // 產生表格 HTML
     let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 900px; border-collapse: collapse; font-family: Arial, sans-serif;">`;
     
     // 標題列
@@ -95,28 +95,44 @@ app.get('/', async (req, res) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <title>9INNINGS CLUB 俱樂部數據分析表</title>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 12px; background-color: #f4f6f9; margin: 0; }
-          .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 0 12px 20px 12px; background-color: #f4f6f9; margin: 0; }
+          
+          /* 📌 頂部固定置頂區塊 */
+          .sticky-top-bar {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background-color: #f4f6f9;
+            padding-top: 12px;
+            padding-bottom: 8px;
+            box-shadow: 0 4px 6px -2px rgba(0,0,0,0.05);
+          }
+          
+          .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
           .title { color: #003366; margin: 0; font-size: 20px; }
-          .save-btn { background-color: #28a745; color: white; font-size: 15px; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+          .save-btn { background-color: #28a745; color: white; font-size: 15px; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
           .save-btn:hover { background-color: #218838; }
-          .nav-container { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 6px; white-space: nowrap; }
+          .nav-container { display: flex; gap: 8px; margin-bottom: 8px; overflow-x: auto; padding-bottom: 4px; white-space: nowrap; }
+          
           .card { background: white; padding: 12px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; -webkit-overflow-scrolling: touch; }
           .cell-input:focus { background-color: #fff !important; border-color: #003366 !important; outline: none; box-shadow: 0 0 4px rgba(0,51,102,0.4); }
         </style>
       </head>
       <body>
-        <div class="header-container">
-          <h1 class="title">⚾ 9INNINGS CLUB 戰績表</h1>
-          <button class="save-btn" onclick="saveData()">💾 儲存修改</button>
-        </div>
-        
-        <!-- 分頁標籤 -->
-        <div class="nav-container">
-          ${navTabsHtml}
+        <!-- 📌 包含標題、儲存按鈕與分頁標籤的置頂區塊 -->
+        <div class="sticky-top-bar">
+          <div class="header-container">
+            <h1 class="title">⚾ 9INNINGS CLUB 戰績表</h1>
+            <button class="save-btn" onclick="saveData()">💾 儲存修改</button>
+          </div>
+          
+          <!-- 分頁標籤 -->
+          <div class="nav-container">
+            ${navTabsHtml}
+          </div>
         </div>
 
-        <!-- 數據表格 (支援手機橫向滑動) -->
+        <!-- 數據表格 -->
         <div class="card">
           ${tableHtml}
         </div>
