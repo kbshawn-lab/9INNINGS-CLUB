@@ -3,7 +3,7 @@ const { google } = require('googleapis');
 const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 3000; // 修正了這裡的語法錯誤
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -28,7 +28,7 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-// 🌐 1. 首頁：緊湊型表格（字體與欄寬縮小，適合手機直式瀏覽）
+// 🌐 1. 首頁：無前 3 欄固定，滿版順暢滑動表格
 app.get('/', async (req, res) => {
   const currentSheet = req.query.sheet || '';
 
@@ -58,24 +58,13 @@ app.get('/', async (req, res) => {
       return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 5px 10px; font-size: 12px; border-radius: 4px; ${activeStyle}">${name}</a>`;
     }).join(' ');
 
-    // 前 3 欄的固定寬度設定（縮小至 65px，大幅減少橫向佔用）
-    const colWidth = 65; 
-
     // 產生表格 HTML
-    let tableHtml = `<table id="dataTable" style="width: 100%; border-collapse: separate; border-spacing: 0; font-family: Arial, sans-serif; font-size: 11px;">`;
+    let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 700px; border-collapse: separate; border-spacing: 0; font-family: Arial, sans-serif; font-size: 11px;">`;
     
-    // 標題列
+    // 標題列（僅向上凍結第一列）
     tableHtml += `<tr style="background-color: #003366; color: white;">`;
-    headers.forEach((h, colIndex) => {
-      let stickyStyle = 'position: sticky; top: 0; z-index: 20; background-color: #003366; color: white;';
-      
-      // 前 3 欄在標題列固定
-      if (colIndex < 3) {
-        const leftPos = colIndex * colWidth;
-        stickyStyle = `position: sticky; top: 0; left: ${leftPos}px; z-index: 25; background-color: #002244; color: white; min-width: ${colWidth}px; max-width: ${colWidth}px;`;
-      }
-
-      tableHtml += `<th style="padding: 4px 2px; border: 1px solid #ccc; font-size: 11px; white-space: nowrap; ${stickyStyle}">${h}</th>`;
+    headers.forEach((h) => {
+      tableHtml += `<th style="padding: 6px 4px; border: 1px solid #ccc; font-size: 11px; white-space: nowrap; position: sticky; top: 0; z-index: 20; background-color: #003366; color: white;">${h}</th>`;
     });
     tableHtml += `</tr>`;
     
@@ -89,16 +78,8 @@ app.get('/', async (req, res) => {
       
       headers.forEach((_, colIndex) => {
         const val = row[colIndex] || '';
-        let cellStickyStyle = '';
-
-        // 前 3 欄加上左側凍結
-        if (colIndex < 3) {
-          const leftPos = colIndex * colWidth;
-          cellStickyStyle = `position: sticky; left: ${leftPos}px; z-index: 10; background-color: ${bgColor}; min-width: ${colWidth}px; max-width: ${colWidth}px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.1);`;
-        }
-
         tableHtml += `
-          <td style="padding: 1px; border: 1px solid #cbd5e1; text-align: center; ${cellStickyStyle}">
+          <td style="padding: 1px; border: 1px solid #cbd5e1; text-align: center;">
             <input type="text" class="cell-input" value="${val}" style="width: 92%; min-width: 55px; padding: 2px 1px; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: 11px; background-color: ${inputBgColor};" />
           </td>`;
       });
