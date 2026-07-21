@@ -268,33 +268,29 @@ app.post('/api/update', async (req, res) => {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
 
-    // 先讀取線上的原始資料
+    // 先讀取試算表中線上的原始資料（包含原本的公式）
     const existingRes = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `'${sheetName}'!A1:Z${values.length}`,
+      valueRenderOption: 'FORMULA' // 💡 強制讀取原始公式而非計算後的值
     });
 
     const existingValues = existingRes.data.values || [];
 
-    // 🔒 安全保護與公式注入
+    // 🔒 安全保護：僅允許寫入 B2:J101，K 欄與其他欄位強制保持試算表原本內容
     const safeValues = values.map((row, rIdx) => {
-      // 試算表中的實際 Row Number（rowIndex 0 是 Row 1，rowIndex 1 是 Row 2...）
-      const sheetRowNum = rIdx + 1;
-
       return row.map((val, cIdx) => {
-        // ⚡ 1. 自動寫入 K2:K101 公式 (rIdx 1~100 對應 Row 2~101, cIdx 10 對應 Column K)
-        if (rIdx >= 1 && rIdx <= 100 && cIdx === 10) {
-          return `=IF(F${sheetRowNum}>G${sheetRowNum}, "W", IF(F${sheetRowNum}=G${sheetRowNum}, "D", "L"))`;
-        }
-
-        // 🔒 2. 僅允許更新 B2:J101 範圍
+        // 僅允許更新 Column B~J (cIdx 1~9) 且 Row 2~101 (rIdx 1~100)
+        // K 欄 (cIdx 10) 會被歸類為非可編輯欄位，直接保留原本線上的公式/資料
         const isEditableCell = (rIdx >= 1 && rIdx <= 100) && (cIdx >= 1 && cIdx <= 9);
+        
         if (isEditableCell) {
           return val;
         } else {
+          // 完全不拿前端回傳的值，直接使用原本試算表內的內容/公式
           return (existingValues[rIdx] && existingValues[rIdx][cIdx] !== undefined) 
             ? existingValues[rIdx][cIdx] 
-            : val;
+            : '';
         }
       });
     });
@@ -302,7 +298,7 @@ app.post('/api/update', async (req, res) => {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
       range: `'${sheetName}'!A1:Z${safeValues.length}`,
-      valueInputOption: 'USER_ENTERED', // 此選項會讓字串 `=IF(...)` 自動被解析為 Google 試算表公式
+      valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: safeValues,
       },
