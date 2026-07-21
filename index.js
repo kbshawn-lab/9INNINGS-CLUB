@@ -60,10 +60,14 @@ app.get('/', async (req, res) => {
       return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 5px 10px; font-size: 12px; border-radius: 4px; ${activeStyle}">${name}</a>`;
     }).join(' ');
 
-    // 根據分頁類型設定字體與表格樣式（輸入資料分頁縮小為 80%）
+    // 根據分頁類型設定字體與縮放（輸入資料分頁縮小為 80%）
     const tableFontSize = isInputSheet ? '8.8px' : '11px';
     const inputPadding = isInputSheet ? '1px 1px' : '2px 1px';
     const thPadding = isInputSheet ? '4px 3px' : '6px 4px';
+    const minInputWidth = isInputSheet ? '44px' : '55px';
+
+    // 左側 3 欄固定的寬度偏移（適用於輸入資料分頁）
+    const colOffsets = [0, 50, 100]; // 可依據實際 A, B, C 欄寬調整像素
 
     let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 700px; border-collapse: separate; border-spacing: 0; font-family: Arial, sans-serif; font-size: ${tableFontSize};">`;
     
@@ -73,46 +77,40 @@ app.get('/', async (req, res) => {
       const bgColor = blockIndex % 2 === 0 ? '#ffffff' : '#edf2f7';
       const inputBgColor = blockIndex % 2 === 0 ? '#fafafa' : '#e2e8f0';
 
-      // 輸入資料分頁前置固定前 3 行 (rowIndex 0, 1, 2)
-      let stickyStyle = '';
-      if (isInputSheet && rowIndex < 3) {
-        const topOffset = rowIndex * 25; // 依列高進行 offset 定位
-        stickyStyle = `position: sticky; top: ${topOffset}px; z-index: ${30 - rowIndex}; background-color: #003366; color: white;`;
-      }
+      tableHtml += `<tr style="background-color: ${bgColor};" data-row="${rowIndex}">`;
 
-      // 標題與資料列渲染
-      if (rowIndex === 0) {
-        // 第一列：標題列
-        tableHtml += `<tr style="background-color: #003366; color: white;">`;
-        row.forEach((h, colIndex) => {
-          // 如果是分析表分頁且非第 Y 欄（第 24 欄索引），正常呈現；若為 Y 欄（Index 24，即第 25 欄）確保精準對齊顯示
-          const headerText = (isAnalysisSheet && colIndex === 24) ? `(Y欄) ${h}` : h;
-          tableHtml += `<th style="padding: ${thPadding}; border: 1px solid #ccc; font-size: ${tableFontSize}; white-space: nowrap; ${stickyStyle || 'position: sticky; top: 0; z-index: 20; background-color: #003366; color: white;'}">${headerText}</th>`;
-        });
-        tableHtml += `</tr>`;
-      } else if (isInputSheet && rowIndex < 3) {
-        // 輸入資料分頁的前 2、3 行（前置固定行）
-        tableHtml += `<tr style="background-color: #003366; color: white;">`;
-        row.forEach((val) => {
+      row.forEach((val, colIndex) => {
+        const cellValue = val || '';
+        
+        // 判斷是否屬於「輸入資料分頁」且為「前 3 欄 (Index 0, 1, 2)」
+        const isStickyCol = isInputSheet && colIndex < 3;
+        
+        let stickyCss = '';
+        if (rowIndex === 0 && isStickyCol) {
+          // 左上角交會區（第 1 列 + 前 3 欄）：同時固定最頂端與最左側
+          stickyCss = `position: sticky; top: 0; left: ${colOffsets[colIndex]}px; z-index: 40; background-color: #002244; color: white;`;
+        } else if (rowIndex === 0) {
+          // 第 1 列非前 3 欄：僅固定頂端
+          stickyCss = `position: sticky; top: 0; z-index: 20; background-color: #003366; color: white;`;
+        } else if (isStickyCol) {
+          // 前 3 欄非第 1 列：僅固定左側
+          stickyCss = `position: sticky; left: ${colOffsets[colIndex]}px; z-index: 10; background-color: ${bgColor};`;
+        }
+
+        if (rowIndex === 0) {
+          // 標題列
+          const headerText = (isAnalysisSheet && colIndex === 24) ? `(Y欄) ${cellValue}` : cellValue;
+          tableHtml += `<th style="padding: ${thPadding}; border: 1px solid #ccc; font-size: ${tableFontSize}; white-space: nowrap; ${stickyCss}">${headerText}</th>`;
+        } else {
+          // 一般資料列
           tableHtml += `
-            <td style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; ${stickyStyle}">
-              <input type="text" class="cell-input" value="${val || ''}" style="width: 92%; min-width: 55px; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: #002244; color: white;" />
+            <td style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; ${stickyCss}">
+              <input type="text" class="cell-input" value="${cellValue}" style="width: 92%; min-width: ${minInputWidth}; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${inputBgColor};" />
             </td>`;
-        });
-        tableHtml += `</tr>`;
-      } else {
-        // 一般資料列
-        tableHtml += `<tr style="background-color: ${bgColor};" data-row="${rowIndex}">`;
-        row.forEach((val, colIndex) => {
-          // 在分析表分頁特別標示/確保呈現原試算表第 Y 欄（第 25 欄，Index 24）
-          const cellValue = val || '';
-          tableHtml += `
-            <td style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center;">
-              <input type="text" class="cell-input" value="${cellValue}" style="width: 92%; min-width: 55px; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${inputBgColor};" />
-            </td>`;
-        });
-        tableHtml += `</tr>`;
-      }
+        }
+      });
+
+      tableHtml += `</tr>`;
     });
 
     tableHtml += `</table>`;
