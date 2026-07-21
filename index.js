@@ -76,21 +76,32 @@ app.get('/', async (req, res) => {
     
     // 產生表格內容
     rows.forEach((row, rowIndex) => {
-      const defaultRowBlock = Math.floor(rowIndex / 5);
-      const defaultBgColor = defaultRowBlock % 2 === 0 ? '#ffffff' : '#edf2f7';
-      const defaultInputBg = defaultRowBlock % 2 === 0 ? '#fafafa' : '#e2e8f0';
+      // 🎨 判斷「輸入資料」與「預設」的 5 列分組色塊 (排除第 1 列 rowIndex 0)
+      let rowBgColor = '#ffffff';
+      let rowInputBg = '#fafafa';
 
-      tableHtml += `<tr style="background-color: ${defaultBgColor};" data-row="${rowIndex}">`;
+      if (rowIndex > 0) {
+        const rowBlockGroup = Math.floor((rowIndex - 1) / 5);
+        if (rowBlockGroup % 2 === 0) {
+          rowBgColor = '#ffffff';
+          rowInputBg = '#fafafa';
+        } else {
+          rowBgColor = '#edf2f7';
+          rowInputBg = '#e2e8f0';
+        }
+      }
+
+      tableHtml += `<tr style="background-color: ${rowBgColor};" data-row="${rowIndex}">`;
 
       row.forEach((val, colIndex) => {
         const cellValue = val || '';
         
         // 🎨 決定儲存格背景顏色
-        let cellBgColor = defaultBgColor;
-        let cellInputBg = defaultInputBg;
+        let cellBgColor = rowBgColor;
+        let cellInputBg = rowInputBg;
 
         if (isAnalysisSheet) {
-          // 分析表專屬：第 3 欄起 (Index >= 2)，每 5 欄換色色塊
+          // 分析表專屬：第 3 欄起 (colIndex >= 2)，每 5 欄換色色塊
           if (colIndex >= 2) {
             const colBlockGroup = Math.floor((colIndex - 2) / 5);
             if (colBlockGroup % 2 === 0) {
@@ -272,7 +283,7 @@ app.post('/api/update', async (req, res) => {
     const existingRes = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `'${sheetName}'!A1:Z${values.length}`,
-      valueRenderOption: 'FORMULA' // 💡 強制讀取原始公式而非計算後的值
+      valueRenderOption: 'FORMULA' // 強制讀取原始公式而非計算後的值
     });
 
     const existingValues = existingRes.data.values || [];
