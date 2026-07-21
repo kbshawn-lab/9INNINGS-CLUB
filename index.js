@@ -6,7 +6,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // 支援傳送更新後的表格 JSON
+app.use(express.json({ limit: '10mb' }));
 
 const SPREADSHEET_ID = '1vCOUP980-AfHL67Duma6h6aqq2YEuBmsV0MfeHsS1Qc';
 
@@ -22,13 +22,13 @@ try {
   console.error("憑證讀取失敗:", error);
 }
 
-// ⚠️ 權限改為可讀寫 (spreadsheets)
+// 可讀寫權限
 const auth = new google.auth.GoogleAuth({
   credentials,
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-// 🌐 1. 首頁：動態讀取、可輸入修改並一鍵儲存的表格網頁
+// 🌐 1. 首頁：5 列一組交替色塊網頁
 app.get('/', async (req, res) => {
   const currentSheet = req.query.sheet || '';
 
@@ -58,26 +58,32 @@ app.get('/', async (req, res) => {
       return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 8px 16px; border-radius: 6px; ${activeStyle}">${name}</a>`;
     }).join(' ');
 
-    // 產生帶有 <input> 輸入框的表格 HTML
+    // 產生表格 HTML
     let tableHtml = `<table id="dataTable" style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif;">`;
     
-    // 標題列
+    // 標題列 (固定深藍色)
     tableHtml += `<tr style="background-color: #003366; color: white;">`;
     headers.forEach(h => {
       tableHtml += `<th style="padding: 10px; border: 1px solid #ccc;">${h}</th>`;
     });
     tableHtml += `</tr>`;
     
-    // 資料列 (變成可輸入的 <input>)
+    // 資料列：每 5 列為一個色塊模組
     dataRows.forEach((row, rowIndex) => {
-      const bgColor = rowIndex % 2 === 0 ? '#f9f9f9' : '#ffffff';
+      // 計算第幾個 5 列色塊組：0~4 列為第 0 組、5~9 列為第 1 組...
+      const blockIndex = Math.floor(rowIndex / 5);
+      
+      // 偶數組用白色 (#ffffff)，奇數組用淡藍灰色 (#edf2f7)，呈現 5 列一組的區塊感
+      const bgColor = blockIndex % 2 === 0 ? '#ffffff' : '#edf2f7';
+      const inputBgColor = blockIndex % 2 === 0 ? '#fafafa' : '#e2e8f0';
+
       tableHtml += `<tr style="background-color: ${bgColor};" data-row="${rowIndex}">`;
       
       headers.forEach((_, colIndex) => {
         const val = row[colIndex] || '';
         tableHtml += `
-          <td style="padding: 4px; border: 1px solid #ddd; text-align: center;">
-            <input type="text" class="cell-input" value="${val}" style="width: 90%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; text-align: center;" />
+          <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: center;">
+            <input type="text" class="cell-input" value="${val}" style="width: 90%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; background-color: ${inputBgColor};" />
           </td>`;
       });
       tableHtml += `</tr>`;
@@ -99,6 +105,7 @@ app.get('/', async (req, res) => {
           .save-btn:hover { background-color: #218838; }
           .nav-container { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
           .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }
+          .cell-input:focus { background-color: #fff !important; border-color: #003366 !important; outline: none; box-shadow: 0 0 4px rgba(0,51,102,0.4); }
         </style>
       </head>
       <body>
@@ -126,14 +133,11 @@ app.get('/', async (req, res) => {
             const table = document.getElementById('dataTable');
             const rows = Array.from(table.querySelectorAll('tr'));
             
-            // 整理標題列與資料列
             const updatedValues = rows.map(tr => {
-              // 標題列
               const ths = tr.querySelectorAll('th');
               if (ths.length > 0) {
                 return Array.from(ths).map(th => th.innerText.trim());
               }
-              // 資料列
               const inputs = tr.querySelectorAll('input');
               return Array.from(inputs).map(input => input.value.trim());
             });
@@ -170,7 +174,7 @@ app.get('/', async (req, res) => {
   }
 });
 
-// 📡 2. 寫回 Google 試算表 (API Endpoint)
+// 📡 2. 寫回 Google 試算表 API
 app.post('/api/update', async (req, res) => {
   const { sheetName, values } = req.body;
 
@@ -181,11 +185,10 @@ app.post('/api/update', async (req, res) => {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
     
-    // 更新指定分頁整個範圍 A1:Z100
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
       range: `'${sheetName}'!A1:Z${values.length}`,
-      valueInputOption: 'USER_ENTERED', // 模擬使用者手動輸入 (支援數字、文字格式自動判斷)
+      valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: values,
       },
