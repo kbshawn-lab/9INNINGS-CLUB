@@ -9,7 +9,7 @@ app.use(cors());
 // 你的 Google 試算表 ID
 const SPREADSHEET_ID = '1vCOUP980-AfHL67Duma6h6aqq2YEuBmsV0MfeHsS1Qc';
 
-// 🌐 1. 首頁：直接嵌入完整 Google 試算表介面 (含分頁、可編輯)
+// 🌐 首頁：使用 htmlview 嵌入 (相容無痕模式、免登入、保留分頁)
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -58,8 +58,8 @@ app.get('/', (req, res) => {
         ⚾ 9INNINGS CLUB 俱樂部數據分析表
       </div>
       <div class="iframe-container">
-        <!-- 嵌入 Google 試算表完整編輯介面 -->
-        <iframe src="https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/edit?widget=true&amp;headers=false"></iframe>
+        <!-- 改用 htmlview 模式，解決無痕視窗擋 Cookie 問題，且保留底部分頁標籤 -->
+        <iframe src="https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/htmlview?widget=true&amp;headers=false"></iframe>
       </div>
     </body>
     </html>
