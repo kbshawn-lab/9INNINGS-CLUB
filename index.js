@@ -3,7 +3,7 @@ const { google } = require('googleapis');
 const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -28,7 +28,7 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-// 🌐 1. 首頁：支援「頁首置頂 + 表格首列凍結 + 前 3 欄凍結」
+// 🌐 1. 首頁：緊湊型表格（字體與欄寬縮小，適合手機直式瀏覽）
 app.get('/', async (req, res) => {
   const currentSheet = req.query.sheet || '';
 
@@ -55,27 +55,27 @@ app.get('/', async (req, res) => {
       const activeStyle = name === targetSheet 
         ? 'background-color: #003366; color: white; font-weight: bold;' 
         : 'background-color: #e2e8f0; color: #333;';
-      return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 8px 16px; border-radius: 6px; ${activeStyle}">${name}</a>`;
+      return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 5px 10px; font-size: 12px; border-radius: 4px; ${activeStyle}">${name}</a>`;
     }).join(' ');
 
-    // 前 3 欄的固定寬度設定 (可以用於精準計算 left 偏移量)
-    const colWidths = [120, 120, 120]; // 前三欄寬度(px)
+    // 前 3 欄的固定寬度設定（縮小至 65px，大幅減少橫向佔用）
+    const colWidth = 65; 
 
     // 產生表格 HTML
-    let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 900px; border-collapse: separate; border-spacing: 0; font-family: Arial, sans-serif;">`;
+    let tableHtml = `<table id="dataTable" style="width: 100%; border-collapse: separate; border-spacing: 0; font-family: Arial, sans-serif; font-size: 11px;">`;
     
-    // 標題列 (固定在表格內部頂端 z-index: 20)
+    // 標題列
     tableHtml += `<tr style="background-color: #003366; color: white;">`;
     headers.forEach((h, colIndex) => {
       let stickyStyle = 'position: sticky; top: 0; z-index: 20; background-color: #003366; color: white;';
       
-      // 前 3 欄在標題列需要更高的 z-index (25)，防止被蓋住
+      // 前 3 欄在標題列固定
       if (colIndex < 3) {
-        const leftPos = colIndex * 120;
-        stickyStyle = `position: sticky; top: 0; left: ${leftPos}px; z-index: 25; background-color: #002244; color: white; min-width: ${colWidths[colIndex]}px;`;
+        const leftPos = colIndex * colWidth;
+        stickyStyle = `position: sticky; top: 0; left: ${leftPos}px; z-index: 25; background-color: #002244; color: white; min-width: ${colWidth}px; max-width: ${colWidth}px;`;
       }
 
-      tableHtml += `<th style="padding: 10px 8px; border: 1px solid #ccc; font-size: 14px; white-space: nowrap; ${stickyStyle}">${h}</th>`;
+      tableHtml += `<th style="padding: 4px 2px; border: 1px solid #ccc; font-size: 11px; white-space: nowrap; ${stickyStyle}">${h}</th>`;
     });
     tableHtml += `</tr>`;
     
@@ -91,15 +91,15 @@ app.get('/', async (req, res) => {
         const val = row[colIndex] || '';
         let cellStickyStyle = '';
 
-        // 如果是前 3 欄，加上左側凍結 (position: sticky; left: ...)
+        // 前 3 欄加上左側凍結
         if (colIndex < 3) {
-          const leftPos = colIndex * 120;
-          cellStickyStyle = `position: sticky; left: ${leftPos}px; z-index: 10; background-color: ${bgColor}; min-width: ${colWidths[colIndex]}px; box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);`;
+          const leftPos = colIndex * colWidth;
+          cellStickyStyle = `position: sticky; left: ${leftPos}px; z-index: 10; background-color: ${bgColor}; min-width: ${colWidth}px; max-width: ${colWidth}px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.1);`;
         }
 
         tableHtml += `
-          <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: center; ${cellStickyStyle}">
-            <input type="text" class="cell-input" value="${val}" style="width: 95%; min-width: 100px; padding: 6px 4px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-size: 14px; background-color: ${inputBgColor};" />
+          <td style="padding: 1px; border: 1px solid #cbd5e1; text-align: center; ${cellStickyStyle}">
+            <input type="text" class="cell-input" value="${val}" style="width: 92%; min-width: 55px; padding: 2px 1px; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: 11px; background-color: ${inputBgColor};" />
           </td>`;
       });
       tableHtml += `</tr>`;
@@ -114,39 +114,39 @@ app.get('/', async (req, res) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <title>9INNINGS CLUB 俱樂部數據分析表</title>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 0 12px 20px 12px; background-color: #f4f6f9; margin: 0; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 0 6px 12px 6px; background-color: #f4f6f9; margin: 0; }
           
-          /* 📌 頂部固定置頂區塊 */
+          /* 📌 頂部固定區塊（緊湊化） */
           .sticky-top-bar {
             position: sticky;
             top: 0;
             z-index: 1000;
             background-color: #f4f6f9;
-            padding-top: 12px;
-            padding-bottom: 8px;
+            padding-top: 8px;
+            padding-bottom: 6px;
           }
           
-          .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
-          .title { color: #003366; margin: 0; font-size: 20px; }
-          .save-btn { background-color: #28a745; color: white; font-size: 15px; padding: 10px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
+          .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
+          .title { color: #003366; margin: 0; font-size: 16px; }
+          .save-btn { background-color: #28a745; color: white; font-size: 13px; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
           .save-btn:hover { background-color: #218838; }
-          .nav-container { display: flex; gap: 8px; margin-bottom: 8px; overflow-x: auto; padding-bottom: 4px; white-space: nowrap; }
+          .nav-container { display: flex; gap: 6px; margin-bottom: 4px; overflow-x: auto; padding-bottom: 4px; white-space: nowrap; }
           
-          /* 表格外框容器，支援兩向捲動 */
+          /* 表格外框容器 */
           .card { 
             background: white; 
             padding: 0; 
-            border-radius: 8px; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+            border-radius: 6px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
             overflow: auto; 
-            max-height: 75vh; /* 限制表格最大高度，讓表格內部的第一列可以固定 */
+            max-height: 80vh; 
             -webkit-overflow-scrolling: touch; 
           }
-          .cell-input:focus { background-color: #fff !important; border-color: #003366 !important; outline: none; box-shadow: 0 0 4px rgba(0,51,102,0.4); }
+          .cell-input:focus { background-color: #fff !important; border-color: #003366 !important; outline: none; box-shadow: 0 0 3px rgba(0,51,102,0.4); }
         </style>
       </head>
       <body>
-        <!-- 📌 置頂區塊：標題、儲存按鈕、分頁 -->
+        <!-- 📌 置頂區塊 -->
         <div class="sticky-top-bar">
           <div class="header-container">
             <h1 class="title">⚾ 9INNINGS CLUB 戰績表</h1>
@@ -159,7 +159,7 @@ app.get('/', async (req, res) => {
           </div>
         </div>
 
-        <!-- 數據表格 (支援垂直與水平雙向凍結) -->
+        <!-- 數據表格 -->
         <div class="card">
           ${tableHtml}
         </div>
