@@ -1,4 +1,5 @@
 const express = require('express');
+const { google } = require('googleapis');
 const cors = require('cors');
 
 const app = express();
@@ -6,64 +7,119 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 
-// 你的 Google 試算表 ID
 const SPREADSHEET_ID = '1vCOUP980-AfHL67Duma6h6aqq2YEuBmsV0MfeHsS1Qc';
 
-// 🌐 首頁：使用 htmlview 嵌入 (相容無痕模式、免登入、保留分頁)
-app.get('/', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html lang="zh-TW">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>9INNINGS CLUB 俱樂部數據分析表</title>
-      <style>
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-        }
-        body, html {
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-          background-color: #f4f6f9;
-        }
-        .header {
-          height: 50px;
-          background-color: #003366;
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 18px;
-          font-weight: bold;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .iframe-container {
-          width: 100%;
-          height: calc(100% - 50px);
-        }
-        iframe {
-          width: 100%;
-          height: 100%;
-          border: none;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        ⚾ 9INNINGS CLUB 俱樂部數據分析表
-      </div>
-      <div class="iframe-container">
-        <!-- 改用 htmlview 模式，解決無痕視窗擋 Cookie 問題，且保留底部分頁標籤 -->
-        <iframe src="https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/htmlview?widget=true&amp;headers=false"></iframe>
-      </div>
-    </body>
-    </html>
-  `);
+// 讀取 Railway 憑證
+let credentials;
+try {
+  const credsEnv = process.env.GOOGLE_CREDENTIALS;
+  credentials = typeof credsEnv === 'string' ? JSON.parse(credsEnv) : credsEnv;
+  if (credentials && credentials.private_key) {
+    credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+  }
+} catch (error) {
+  console.error("憑證讀取失敗:", error);
+}
+
+const auth = new google.auth.GoogleAuth({
+  credentials,
+  scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+});
+
+// 🌐 1. 首頁：動態讀取 Google 試算表，支援切換分頁，相容所有瀏覽器與無痕模式
+app.get('/', async (req, res) => {
+  const currentSheet = req.query.sheet || ''; // 讀取網址傳入的分頁名稱
+
+  try {
+    const sheets = google.sheets({ version: 'v4', auth });
+    
+    // 取得試算表內所有的「分頁名稱」
+    const metaData = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+    const sheetList = metaData.data.sheets.map(s => s.properties.title);
+    
+    // 若未指定分頁，預設使用第一個分頁
+    const targetSheet = currentSheet || sheetList[0];
+
+    // 抓取該分頁的資料
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `'${targetSheet}'!A1:Z100`,
+    });
+
+    const rows = response.data.values || [];
+    const headers = rows[0] || [];
+    const dataRows = rows.slice(1);
+
+    // 產生分頁選單 HTML
+    const navTabsHtml = sheetList.map(name => {
+      const activeStyle = name === targetSheet 
+        ? 'background-color: #003366; color: white; font-weight: bold;' 
+        : 'background-color: #e2e8f0; color: #333;';
+      return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 8px 16px; border-radius: 6px; ${activeStyle}">${name}</a>`;
+    }).join(' ');
+
+    // 產生表格 HTML
+    let tableHtml = `<table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif;">`;
+    tableHtml += `<tr style="background-color: #003366; color: white;">${headers.map(h => `<th style="padding: 10px; border: 1px solid #ccc;">${h}</th>`).join('')}</tr>`;
+    
+    dataRows.forEach((row, rowIndex) => {
+      const bgColor = rowIndex % 2 === 0 ? '#f9f9f9' : '#ffffff';
+      tableHtml += `<tr style="background-color: ${bgColor};">`;
+      headers.forEach((_, colIndex) => {
+        tableHtml += `<td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${row[colIndex] || ''}</td>`;
+      });
+      tableHtml += `</tr>`;
+    });
+    tableHtml += `</table>`;
+
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="zh-TW">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>9INNINGS CLUB 俱樂部數據分析表</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background-color: #f4f6f9; margin: 0; }
+          .header { text-align: center; color: #003366; margin-bottom: 20px; }
+          .nav-container { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
+          .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>⚾ 9INNINGS CLUB 俱樂部數據分析表</h1>
+        </div>
+        
+        <!-- 分頁切換按鈕區域 -->
+        <div class="nav-container">
+          ${navTabsHtml}
+        </div>
+
+        <!-- 數據表格區域 -->
+        <div class="card">
+          ${tableHtml}
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    res.status(500).send(`<h3>載入失敗：${error.message}</h3>`);
+  }
+});
+
+// 保留原始 API
+app.get('/api/sheets', async (req, res) => {
+  try {
+    const sheets = google.sheets({ version: 'v4', auth });
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'A1:Z100',
+    });
+    res.json({ success: true, data: response.data.values });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 app.listen(PORT, () => {
