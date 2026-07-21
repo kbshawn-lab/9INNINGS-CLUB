@@ -61,7 +61,7 @@ app.get('/', async (req, res) => {
       return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 5px 10px; font-size: 12px; border-radius: 4px; ${activeStyle}">${name}</a>`;
     }).join(' ');
 
-    // 統一表格字體與外觀縮小 80% (輸入資料、分析表、總紀錄全套用)
+    // 統一表格字體與外觀縮小 80%
     const tableFontSize = '8.8px';
     const inputPadding = '1px 1px';
     const thPadding = '4px 3px';
@@ -85,23 +85,25 @@ app.get('/', async (req, res) => {
       row.forEach((val, colIndex) => {
         const cellValue = val || '';
         
-        // 判斷是否鎖定欄列
+        // 判斷是否鎖定欄列（Freeze Scroll）
         const isStickyCol = (isInputSheet || isTotalSheet) && colIndex < 3;
         const isStickyRow = (isTotalSheet && rowIndex < 3) || (!isTotalSheet && rowIndex === 0);
 
         let stickyCss = '';
         if (isStickyRow && isStickyCol) {
-          // 欄與列的交會區塊（頂端與左側雙向固定）
           const topOffset = isTotalSheet ? rowOffsets[rowIndex] : 0;
           stickyCss = `position: sticky; top: ${topOffset}px; left: ${colOffsets[colIndex]}px; z-index: 50; background-color: #002244; color: white;`;
         } else if (isStickyRow) {
-          // 僅固定頂端列
           const topOffset = isTotalSheet ? rowOffsets[rowIndex] : 0;
           stickyCss = `position: sticky; top: ${topOffset}px; z-index: 20; background-color: #003366; color: white;`;
         } else if (isStickyCol) {
-          // 僅固定左側欄
           stickyCss = `position: sticky; left: ${colOffsets[colIndex]}px; z-index: 10; background-color: ${bgColor};`;
         }
+
+        // 🔒 權限管控判斷：僅允許在「輸入資料」分頁的 B2:J101 (rowIndex 1~100, colIndex 1~9，即 Column B~J) 編輯
+        const isEditable = isInputSheet && (rowIndex >= 1 && rowIndex <= 100) && (colIndex >= 1 && colIndex <= 9);
+        const readonlyAttr = isEditable ? '' : 'readonly';
+        const cursorStyle = isEditable ? 'cursor: text;' : 'cursor: not-allowed; opacity: 0.8;';
 
         if (rowIndex === 0) {
           // 第一列 (標題列)
@@ -111,7 +113,7 @@ app.get('/', async (req, res) => {
           // 一般資料列
           tableHtml += `
             <td style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; ${stickyCss}">
-              <input type="text" class="cell-input" value="${cellValue}" style="width: 92%; min-width: ${minInputWidth}; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${inputBgColor};" />
+              <input type="text" class="cell-input" value="${cellValue}" ${readonlyAttr} style="width: 92%; min-width: ${minInputWidth}; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${inputBgColor}; ${cursorStyle}" />
             </td>`;
         }
       });
@@ -145,6 +147,7 @@ app.get('/', async (req, res) => {
           .title { color: #003366; margin: 0; font-size: 16px; }
           .save-btn { background-color: #28a745; color: white; font-size: 13px; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
           .save-btn:hover { background-color: #218838; }
+          .save-btn:disabled { background-color: #6c757d; cursor: not-allowed; }
           .nav-container { display: flex; gap: 6px; margin-bottom: 4px; overflow-x: auto; padding-bottom: 4px; white-space: nowrap; }
           
           /* 表格外框容器 */
@@ -157,7 +160,7 @@ app.get('/', async (req, res) => {
             max-height: 80vh; 
             -webkit-overflow-scrolling: touch; 
           }
-          .cell-input:focus { background-color: #fff !important; border-color: #003366 !important; outline: none; box-shadow: 0 0 3px rgba(0,51,102,0.4); }
+          .cell-input:focus:not([readonly]) { background-color: #fff !important; border-color: #003366 !important; outline: none; box-shadow: 0 0 3px rgba(0,51,102,0.4); }
         </style>
       </head>
       <body>
@@ -165,7 +168,7 @@ app.get('/', async (req, res) => {
         <div class="sticky-top-bar">
           <div class="header-container">
             <h1 class="title">⚾ 9INNINGS CLUB 戰績表</h1>
-            <button class="save-btn" onclick="saveData()">💾 儲存修改</button>
+            ${isInputSheet ? '<button class="save-btn" onclick="saveData()">💾 儲存修改</button>' : '<span style="font-size:12px; color:#666; background:#e2e8f0; padding:4px 8px; border-radius:4px;">🔒 唯讀檢視</span>'}
           </div>
           
           <!-- 分頁標籤 -->
@@ -182,6 +185,8 @@ app.get('/', async (req, res) => {
         <script>
           async function saveData() {
             const btn = document.querySelector('.save-btn');
+            if (!btn) return;
+            
             btn.innerText = '⏳ 儲存中...';
             btn.disabled = true;
 
@@ -237,15 +242,44 @@ app.post('/api/update', async (req, res) => {
     return res.status(400).json({ success: false, error: '缺少必要欄位' });
   }
 
+  // 🔒 後端權限檢查：非「輸入資料」分頁禁止寫入
+  if (!sheetName.includes("輸入資料")) {
+    return res.status(403).json({ success: false, error: '非權限分頁，禁止儲存！' });
+  }
+
   try {
     const sheets = google.sheets({ version: 'v4', auth });
+
+    // 先讀取線上的原始資料
+    const existingRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `'${sheetName}'!A1:Z${values.length}`,
+    });
+
+    const existingValues = existingRes.data.values || [];
+
+    // 🔒 安全保護：只允許更新 B2:J101 範圍，非此範圍強制保留原始線上資料
+    const safeValues = values.map((row, rIdx) => {
+      return row.map((val, cIdx) => {
+        // rIdx 1~100 代表 Row 2~101；cIdx 1~9 代表 Column B~J
+        const isEditableCell = (rIdx >= 1 && rIdx <= 100) && (cIdx >= 1 && cIdx <= 9);
+        if (isEditableCell) {
+          return val; // 允許更新
+        } else {
+          // 保留試算表原本的內容
+          return (existingValues[rIdx] && existingValues[rIdx][cIdx] !== undefined) 
+            ? existingValues[rIdx][cIdx] 
+            : val;
+        }
+      });
+    });
     
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `'${sheetName}'!A1:Z${values.length}`,
+      range: `'${sheetName}'!A1:Z${safeValues.length}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
-        values: values,
+        values: safeValues,
       },
     });
 
