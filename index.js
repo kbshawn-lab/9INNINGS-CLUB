@@ -7,7 +7,11 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 
-const credentials = JSON.parse('{
+// 1. 請填入你的試算表 ID
+const SPREADSHEET_ID = '你的Google試算表ID';
+
+// 2. 請將你的 JSON 憑證內容完全貼在下面的大括號內
+const credentials = {
   "type": "service_account",
   "project_id": "sapient-visitor-503114-q9",
   "private_key_id": "7be9c4a487da15151bb01f46eff02dfd1432e7fc",
@@ -19,21 +23,24 @@ const credentials = JSON.parse('{
   "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
   "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/id-ing-club%40sapient-visitor-503114-q9.iam.gserviceaccount.com",
   "universe_domain": "googleapis.com"
-}`);
+};
 
 const auth = new google.auth.GoogleAuth({
   credentials,
   scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
 });
 
+app.get('/', (req, res) => {
+  res.send('9INNINGS-CLUB API Server 運作中！請存取 /api/sheets 取得資料。');
+});
+
 app.get('/api/sheets', async (req, res) => {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheetId = "1vCOUP980-AfHL67Duma6h6aqq2YEuBmsV0MfeHsS1Qc";
 
     const response = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: 'Sheet1!A1:Z100', // ⚠️ 如果你的試算表分頁叫別的名字（例如「工作表1」），請記得把 Sheet1 改掉
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Sheet1!A1:Z100', // ⚠️ 若試算表分頁非 Sheet1，請改成你的分頁名稱（例如「工作表1」）
     });
 
     const rows = response.data.values;
