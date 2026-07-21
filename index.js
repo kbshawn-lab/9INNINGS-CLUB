@@ -76,15 +76,33 @@ app.get('/', async (req, res) => {
     
     // 產生表格內容
     rows.forEach((row, rowIndex) => {
-      const blockIndex = Math.floor(rowIndex / 5);
-      const bgColor = blockIndex % 2 === 0 ? '#ffffff' : '#edf2f7';
-      const inputBgColor = blockIndex % 2 === 0 ? '#fafafa' : '#e2e8f0';
+      const defaultRowBlock = Math.floor(rowIndex / 5);
+      const defaultBgColor = defaultRowBlock % 2 === 0 ? '#ffffff' : '#edf2f7';
+      const defaultInputBg = defaultRowBlock % 2 === 0 ? '#fafafa' : '#e2e8f0';
 
-      tableHtml += `<tr style="background-color: ${bgColor};" data-row="${rowIndex}">`;
+      tableHtml += `<tr style="background-color: ${defaultBgColor};" data-row="${rowIndex}">`;
 
       row.forEach((val, colIndex) => {
         const cellValue = val || '';
         
+        // 🎨 決定儲存格背景顏色
+        let cellBgColor = defaultBgColor;
+        let cellInputBg = defaultInputBg;
+
+        if (isAnalysisSheet) {
+          // 分析表專屬：第 3 欄起 (Index >= 2)，每 5 欄換色色塊
+          if (colIndex >= 2) {
+            const colBlockGroup = Math.floor((colIndex - 2) / 5);
+            if (colBlockGroup % 2 === 0) {
+              cellBgColor = '#edf2f7';
+              cellInputBg = '#e2e8f0';
+            } else {
+              cellBgColor = '#ffffff';
+              cellInputBg = '#fafafa';
+            }
+          }
+        }
+
         // 判斷是否鎖定欄列（Freeze Scroll）
         const isStickyCol = (isInputSheet || isTotalSheet) && colIndex < 3;
         const isStickyRow = (isTotalSheet && rowIndex < 3) || (!isTotalSheet && rowIndex === 0);
@@ -97,7 +115,7 @@ app.get('/', async (req, res) => {
           const topOffset = isTotalSheet ? rowOffsets[rowIndex] : 0;
           stickyCss = `position: sticky; top: ${topOffset}px; z-index: 20; background-color: #003366; color: white;`;
         } else if (isStickyCol) {
-          stickyCss = `position: sticky; left: ${colOffsets[colIndex]}px; z-index: 10; background-color: ${bgColor};`;
+          stickyCss = `position: sticky; left: ${colOffsets[colIndex]}px; z-index: 10; background-color: ${cellBgColor};`;
         }
 
         // 🔒 權限管控判斷：僅允許在「輸入資料」分頁的 B2:J101 (rowIndex 1~100, colIndex 1~9，即 Column B~J) 編輯
@@ -112,8 +130,8 @@ app.get('/', async (req, res) => {
         } else {
           // 一般資料列
           tableHtml += `
-            <td style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; ${stickyCss}">
-              <input type="text" class="cell-input" value="${cellValue}" ${readonlyAttr} style="width: 92%; min-width: ${minInputWidth}; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${inputBgColor}; ${cursorStyle}" />
+            <td style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss}">
+              <input type="text" class="cell-input" value="${cellValue}" ${readonlyAttr} style="width: 92%; min-width: ${minInputWidth}; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle}" />
             </td>`;
         }
       });
@@ -258,15 +276,22 @@ app.post('/api/update', async (req, res) => {
 
     const existingValues = existingRes.data.values || [];
 
-    // 🔒 安全保護：只允許更新 B2:J101 範圍，非此範圍強制保留原始線上資料
+    // 🔒 安全保護與公式注入
     const safeValues = values.map((row, rIdx) => {
+      // 試算表中的實際 Row Number（rowIndex 0 是 Row 1，rowIndex 1 是 Row 2...）
+      const sheetRowNum = rIdx + 1;
+
       return row.map((val, cIdx) => {
-        // rIdx 1~100 代表 Row 2~101；cIdx 1~9 代表 Column B~J
+        // ⚡ 1. 自動寫入 K2:K101 公式 (rIdx 1~100 對應 Row 2~101, cIdx 10 對應 Column K)
+        if (rIdx >= 1 && rIdx <= 100 && cIdx === 10) {
+          return `=IF(F${sheetRowNum}>G${sheetRowNum}, "W", IF(F${sheetRowNum}=G${sheetRowNum}, "D", "L"))`;
+        }
+
+        // 🔒 2. 僅允許更新 B2:J101 範圍
         const isEditableCell = (rIdx >= 1 && rIdx <= 100) && (cIdx >= 1 && cIdx <= 9);
         if (isEditableCell) {
-          return val; // 允許更新
+          return val;
         } else {
-          // 保留試算表原本的內容
           return (existingValues[rIdx] && existingValues[rIdx][cIdx] !== undefined) 
             ? existingValues[rIdx][cIdx] 
             : val;
@@ -277,7 +302,7 @@ app.post('/api/update', async (req, res) => {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
       range: `'${sheetName}'!A1:Z${safeValues.length}`,
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'USER_ENTERED', // 此選項會讓字串 `=IF(...)` 自動被解析為 Google 試算表公式
       requestBody: {
         values: safeValues,
       },
