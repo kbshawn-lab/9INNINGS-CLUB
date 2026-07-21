@@ -28,7 +28,7 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-// 🌐 1. 首頁：支援「頂部固定儲存按鈕」與手機最佳化
+// 🌐 1. 首頁：支援「頁首置頂 + 表格首列凍結 + 前 3 欄凍結」
 app.get('/', async (req, res) => {
   const currentSheet = req.query.sheet || '';
 
@@ -58,13 +58,24 @@ app.get('/', async (req, res) => {
       return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 8px 16px; border-radius: 6px; ${activeStyle}">${name}</a>`;
     }).join(' ');
 
+    // 前 3 欄的固定寬度設定 (可以用於精準計算 left 偏移量)
+    const colWidths = [120, 120, 120]; // 前三欄寬度(px)
+
     // 產生表格 HTML
-    let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 900px; border-collapse: collapse; font-family: Arial, sans-serif;">`;
+    let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 900px; border-collapse: separate; border-spacing: 0; font-family: Arial, sans-serif;">`;
     
-    // 標題列
+    // 標題列 (固定在表格內部頂端 z-index: 20)
     tableHtml += `<tr style="background-color: #003366; color: white;">`;
-    headers.forEach(h => {
-      tableHtml += `<th style="padding: 10px 8px; border: 1px solid #ccc; font-size: 14px; white-space: nowrap;">${h}</th>`;
+    headers.forEach((h, colIndex) => {
+      let stickyStyle = 'position: sticky; top: 0; z-index: 20; background-color: #003366; color: white;';
+      
+      // 前 3 欄在標題列需要更高的 z-index (25)，防止被蓋住
+      if (colIndex < 3) {
+        const leftPos = colIndex * 120;
+        stickyStyle = `position: sticky; top: 0; left: ${leftPos}px; z-index: 25; background-color: #002244; color: white; min-width: ${colWidths[colIndex]}px;`;
+      }
+
+      tableHtml += `<th style="padding: 10px 8px; border: 1px solid #ccc; font-size: 14px; white-space: nowrap; ${stickyStyle}">${h}</th>`;
     });
     tableHtml += `</tr>`;
     
@@ -78,9 +89,17 @@ app.get('/', async (req, res) => {
       
       headers.forEach((_, colIndex) => {
         const val = row[colIndex] || '';
+        let cellStickyStyle = '';
+
+        // 如果是前 3 欄，加上左側凍結 (position: sticky; left: ...)
+        if (colIndex < 3) {
+          const leftPos = colIndex * 120;
+          cellStickyStyle = `position: sticky; left: ${leftPos}px; z-index: 10; background-color: ${bgColor}; min-width: ${colWidths[colIndex]}px; box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);`;
+        }
+
         tableHtml += `
-          <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: center;">
-            <input type="text" class="cell-input" value="${val}" style="width: 95%; min-width: 110px; padding: 6px 4px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-size: 14px; background-color: ${inputBgColor};" />
+          <td style="padding: 4px; border: 1px solid #cbd5e1; text-align: center; ${cellStickyStyle}">
+            <input type="text" class="cell-input" value="${val}" style="width: 95%; min-width: 100px; padding: 6px 4px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-size: 14px; background-color: ${inputBgColor};" />
           </td>`;
       });
       tableHtml += `</tr>`;
@@ -105,7 +124,6 @@ app.get('/', async (req, res) => {
             background-color: #f4f6f9;
             padding-top: 12px;
             padding-bottom: 8px;
-            box-shadow: 0 4px 6px -2px rgba(0,0,0,0.05);
           }
           
           .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
@@ -114,12 +132,21 @@ app.get('/', async (req, res) => {
           .save-btn:hover { background-color: #218838; }
           .nav-container { display: flex; gap: 8px; margin-bottom: 8px; overflow-x: auto; padding-bottom: 4px; white-space: nowrap; }
           
-          .card { background: white; padding: 12px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          /* 表格外框容器，支援兩向捲動 */
+          .card { 
+            background: white; 
+            padding: 0; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+            overflow: auto; 
+            max-height: 75vh; /* 限制表格最大高度，讓表格內部的第一列可以固定 */
+            -webkit-overflow-scrolling: touch; 
+          }
           .cell-input:focus { background-color: #fff !important; border-color: #003366 !important; outline: none; box-shadow: 0 0 4px rgba(0,51,102,0.4); }
         </style>
       </head>
       <body>
-        <!-- 📌 包含標題、儲存按鈕與分頁標籤的置頂區塊 -->
+        <!-- 📌 置頂區塊：標題、儲存按鈕、分頁 -->
         <div class="sticky-top-bar">
           <div class="header-container">
             <h1 class="title">⚾ 9INNINGS CLUB 戰績表</h1>
@@ -132,7 +159,7 @@ app.get('/', async (req, res) => {
           </div>
         </div>
 
-        <!-- 數據表格 -->
+        <!-- 數據表格 (支援垂直與水平雙向凍結) -->
         <div class="card">
           ${tableHtml}
         </div>
