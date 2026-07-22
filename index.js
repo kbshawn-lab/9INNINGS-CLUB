@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// 🌟 修改：優先讀取環境變數 SPREADSHEET_ID，若未設定則使用預設的舊 ID
+// 🌟 優先讀取環境變數 SPREADSHEET_ID，若未設定則使用預設的舊 ID
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID || '1vCOUP980-AfHL67Duma6h6aqq2YEuBmsV0MfeHsS1Qc';
 
 // 讀取 Railway 憑證
@@ -53,6 +53,24 @@ function getGreenGrayGradientColor(valStr) {
   const r = Math.round(108 + (40 - 108) * ratio);
   const g = Math.round(117 + (167 - 117) * ratio);
   const b = Math.round(125 + (69 - 125) * ratio);
+
+  return { bg: `rgb(${r}, ${g}, ${b})`, text: '#ffffff' };
+}
+
+// 🎨 🌟 新增：W 欄色階 ( >= +5 綠色 #28a745 -> <= -5 紅色 #dc3545)
+function getWColumnGradientColor(valStr) {
+  if (valStr === undefined || valStr === null || valStr === '') return null;
+  const num = parseFloat(valStr.toString().replace('%', '').trim());
+  if (isNaN(num)) return null;
+
+  // 將數值限制在 -5 到 +5 之間，並映射到 0 ~ 1 的比例 ( -5 為 0，+5 為 1 )
+  const clamped = Math.min(Math.max(num, -5), 5);
+  const ratio = (clamped + 5) / 10;
+
+  // 紅色 (#dc3545 -> rgb(220, 53, 69)) 到 綠色 (#28a745 -> rgb(40, 167, 69))
+  const r = Math.round(220 + (40 - 220) * ratio);
+  const g = Math.round(53 + (167 - 53) * ratio);
+  const b = Math.round(69 + (69 - 69) * ratio);
 
   return { bg: `rgb(${r}, ${g}, ${b})`, text: '#ffffff' };
 }
@@ -166,10 +184,9 @@ app.get('/', async (req, res) => {
             // S 欄：變寬 300%
             cellWidthStyle = 'min-width: 132px; width: 132px;';
           } else if ([21, 22, 23, 24].includes(colIndex)) {
-            // 🌟 2. V欄(21)、W欄(22)、X欄(23)、Y欄(24)：一律強烈設定最小寬度 44px 且自動白空不折行，防止手機擠壓
+            // V欄(21)、W欄(22)、X欄(23)、Y欄(24)：一律強烈設定最小寬度 44px 且自動白空不折行，防止手機擠壓
             cellWidthStyle = 'min-width: 44px; width: 44px; white-space: nowrap;';
           }
-          // 註：C 欄 (colIndex 2) 預設套用 cellWidthStyle = 'min-width: 44px;'，與 L 欄完全一致
 
           // A3:N103 統一底色
           if (colIndex >= 0 && colIndex <= 13 && rowIndex >= 2 && rowIndex <= 102) {
@@ -195,6 +212,16 @@ app.get('/', async (req, res) => {
           // U3:U22 色階 (100% 綠 -> 0% 紅)
           if (colIndex === 20 && rowIndex >= 2 && rowIndex <= 21) {
             const grad = getRedGreenGradientColor(cellValue);
+            if (grad) {
+              cellBgColor = grad.bg;
+              cellInputBg = grad.bg;
+              customTextColor = `color: ${grad.text}; font-weight: bold;`;
+            }
+          }
+
+          // 🌟 新增：W3:W22 色階 ( >=5 綠 -> <=-5 紅) (colIndex 22, rowIndex 2~21)
+          if (colIndex === 22 && rowIndex >= 2 && rowIndex <= 21) {
+            const grad = getWColumnGradientColor(cellValue);
             if (grad) {
               cellBgColor = grad.bg;
               cellInputBg = grad.bg;
@@ -236,7 +263,6 @@ app.get('/', async (req, res) => {
           let filterHeaderHtml = '';
           if (isAnalysisSheet && rowIndex === 2 && colIndex <= 13) {
             if (colIndex === 0) {
-              // A 欄：排序按鈕上下顯示
               filterHeaderHtml = `
                 <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0px; height:100%;">
                   <button onclick="sortTable(${colIndex}, 'asc')" style="padding:0; font-size:6px; line-height:8px; cursor:pointer; border:none; background:transparent;" title="升遞排序">▲</button>
@@ -244,7 +270,6 @@ app.get('/', async (req, res) => {
                 </div>
               `;
             } else {
-              // C~N 欄：僅保留排序按鈕
               filterHeaderHtml = `
                 <div style="display:flex; align-items:center; justify-content:center; gap:1px; white-space: nowrap;">
                   <span style="font-weight:bold; font-size:8.8px;">${cellValue}</span>
