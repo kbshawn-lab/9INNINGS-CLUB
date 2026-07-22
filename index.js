@@ -153,8 +153,12 @@ app.get('/', async (req, res) => {
 
         if (isAnalysisSheet) {
           if (colIndex === 0) {
-            // 分析表 A 欄：寬度縮小 70% (改為約 13px)
+            // 分析表 A 欄：寬度縮小 70% (約 13px)
             cellWidthStyle = 'min-width: 13px; width: 13px;';
+            cellPaddingStyle = '1px 0px;';
+          } else if ([2, 6, 7, 8].includes(colIndex)) {
+            // 🌟 C欄(2)、G欄(6)、H欄(7)、I欄(8)：縮小至極限
+            cellWidthStyle = 'width: 1px; white-space: nowrap;';
             cellPaddingStyle = '1px 0px;';
           } else if (colIndex === 18) {
             // S 欄：變寬 300%
@@ -234,12 +238,12 @@ app.get('/', async (req, res) => {
                 </div>
               `;
             } else {
-              // 🌟 C~N 欄 (rowIndex === 2 即第三列)：移除篩選輸入框，僅保留排序按鈕，縮小欄高
+              // C~N 欄：僅保留排序按鈕，縮小欄高
               filterHeaderHtml = `
-                <div style="display:flex; align-items:center; justify-content:center; gap:2px; white-space: nowrap;">
+                <div style="display:flex; align-items:center; justify-content:center; gap:1px; white-space: nowrap;">
                   <span style="font-weight:bold; font-size:8.8px;">${cellValue}</span>
-                  <button onclick="sortTable(${colIndex}, 'asc')" style="padding:0 1px; font-size:7px; cursor:pointer; border:1px solid #cbd5e1; background:#ffffff; border-radius:2px;" title="升遞排序">▲</button>
-                  <button onclick="sortTable(${colIndex}, 'desc')" style="padding:0 1px; font-size:7px; cursor:pointer; border:1px solid #cbd5e1; background:#ffffff; border-radius:2px;" title="降遞排序">▼</button>
+                  <button onclick="sortTable(${colIndex}, 'asc')" style="padding:0; font-size:7px; cursor:pointer; border:1px solid #cbd5e1; background:#ffffff; border-radius:2px;" title="升遞排序">▲</button>
+                  <button onclick="sortTable(${colIndex}, 'desc')" style="padding:0; font-size:7px; cursor:pointer; border:1px solid #cbd5e1; background:#ffffff; border-radius:2px;" title="降遞排序">▼</button>
                 </div>
               `;
             }
@@ -249,9 +253,10 @@ app.get('/', async (req, res) => {
                 ${filterHeaderHtml}
               </td>`;
           } else {
+            const inputWidthStyle = [2, 6, 7, 8].includes(colIndex) ? 'width: 100%;' : 'width: 92%;';
             tableHtml += `
               <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss}">
-                <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="width: 92%; ${cellWidthStyle} padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" oninput="handleInputLiveCalc(this, ${rowIndex}, ${colIndex})" />
+                <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="${inputWidthStyle} ${cellWidthStyle} padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" oninput="handleInputLiveCalc(this, ${rowIndex}, ${colIndex})" />
               </td>`;
           }
         }
