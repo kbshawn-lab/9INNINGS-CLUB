@@ -225,9 +225,8 @@ app.get('/', async (req, res) => {
         } else {
           let filterHeaderHtml = '';
           if (isAnalysisSheet && rowIndex === 2 && colIndex <= 13) {
-            // 🌟 需求 1 & 2：分析表 A3:N3 樣式調整
             if (colIndex === 0) {
-              // A 欄：排序按鈕改為上下顯示 (flex-direction: column)
+              // A 欄：排序按鈕上下顯示
               filterHeaderHtml = `
                 <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0px; height:100%;">
                   <button onclick="sortTable(${colIndex}, 'asc')" style="padding:0; font-size:6px; line-height:8px; cursor:pointer; border:none; background:transparent;" title="升遞排序">▲</button>
@@ -235,19 +234,18 @@ app.get('/', async (req, res) => {
                 </div>
               `;
             } else {
-              // B~N 欄 (rowIndex === 2 即第三列)：文字保持水平、欄高縮小至與其他列相同 (padding: 1px)
+              // 🌟 C~N 欄 (rowIndex === 2 即第三列)：移除篩選輸入框，僅保留排序按鈕，縮小欄高
               filterHeaderHtml = `
-                <div style="display:flex; align-items:center; justify-content:center; gap:2px; margin-bottom:1px; writing-mode: horizontal-tb; white-space: nowrap;">
-                  <span style="font-weight:bold; font-size:8px;">${cellValue}</span>
-                  <button onclick="sortTable(${colIndex}, 'asc')" style="padding:0 1px; font-size:7px; cursor:pointer;" title="升遞排序">▲</button>
-                  <button onclick="sortTable(${colIndex}, 'desc')" style="padding:0 1px; font-size:7px; cursor:pointer;" title="降遞排序">▼</button>
+                <div style="display:flex; align-items:center; justify-content:center; gap:2px; white-space: nowrap;">
+                  <span style="font-weight:bold; font-size:8.8px;">${cellValue}</span>
+                  <button onclick="sortTable(${colIndex}, 'asc')" style="padding:0 1px; font-size:7px; cursor:pointer; border:1px solid #cbd5e1; background:#ffffff; border-radius:2px;" title="升遞排序">▲</button>
+                  <button onclick="sortTable(${colIndex}, 'desc')" style="padding:0 1px; font-size:7px; cursor:pointer; border:1px solid #cbd5e1; background:#ffffff; border-radius:2px;" title="降遞排序">▼</button>
                 </div>
-                <input type="text" placeholder="篩選..." onkeyup="filterTable(${colIndex}, this.value)" style="width:85%; font-size:7px; padding:0px 1px; border:1px solid #94a3b8; border-radius:2px;" />
               `;
             }
 
             tableHtml += `
-              <td class="table-cell" data-col="${colIndex}" style="padding: 1px; border: 1px solid #cbd5e1; text-align: center; background-color: #dbeafe; ${stickyCss}">
+              <td class="table-cell" data-col="${colIndex}" style="padding: 1px 0px; border: 1px solid #cbd5e1; text-align: center; background-color: #dbeafe; ${stickyCss}">
                 ${filterHeaderHtml}
               </td>`;
           } else {
@@ -300,8 +298,6 @@ app.get('/', async (req, res) => {
         </div>
 
         <script>
-          const activeFilters = {};
-
           function handleInputLiveCalc(inputEl, rowIndex, colIndex) {
             if (!"${isInputSheet}" || rowIndex < 1 || rowIndex > 100) return;
             if (colIndex !== 5 && colIndex !== 6) return;
@@ -318,46 +314,6 @@ app.get('/', async (req, res) => {
               const valG = parseFloat(inputG.value) || 0;
               inputL.value = valF - valG;
             }
-          }
-
-          function filterTable(colIndex, keyword) {
-            activeFilters[colIndex] = keyword.toLowerCase().trim();
-            applyFiltersAndSort();
-          }
-
-          function applyFiltersAndSort() {
-            const table = document.getElementById('dataTable');
-            const rows = Array.from(table.querySelectorAll('tr'));
-
-            rows.forEach(tr => {
-              const rIdx = parseInt(tr.getAttribute('data-row'));
-              if (rIdx >= 3 && rIdx <= 102) {
-                const leftCells = Array.from(tr.querySelectorAll('td')).filter(td => {
-                  const cIdx = parseInt(td.getAttribute('data-col'));
-                  return cIdx <= 13;
-                });
-
-                let isMatch = true;
-
-                for (const [cIdx, kw] of Object.entries(activeFilters)) {
-                  if (kw) {
-                    const matchedTd = leftCells.find(td => parseInt(td.getAttribute('data-col')) === parseInt(cIdx));
-                    if (matchedTd) {
-                      const inp = matchedTd.querySelector('input');
-                      const val = (inp ? inp.value : matchedTd.innerText).toLowerCase();
-                      if (!val.includes(kw)) {
-                        isMatch = false;
-                        break;
-                      }
-                    }
-                  }
-                }
-
-                leftCells.forEach(td => {
-                  td.style.visibility = isMatch ? 'visible' : 'hidden';
-                });
-              }
-            });
           }
 
           function sortTable(targetColIndex, direction) {
@@ -423,8 +379,6 @@ app.get('/', async (req, res) => {
                 }
               });
             });
-
-            applyFiltersAndSort();
           }
 
           async function saveData() {
