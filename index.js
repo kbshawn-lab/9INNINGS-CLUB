@@ -57,17 +57,15 @@ function getGreenGrayGradientColor(valStr) {
   return { bg: `rgb(${r}, ${g}, ${b})`, text: '#ffffff' };
 }
 
-// 🎨 🌟 新增：W 欄色階 ( >= +5 綠色 #28a745 -> <= -5 紅色 #dc3545)
+// 🎨 W 欄色階 ( >= +5 綠色 #28a745 -> <= -5 紅色 #dc3545)
 function getWColumnGradientColor(valStr) {
   if (valStr === undefined || valStr === null || valStr === '') return null;
   const num = parseFloat(valStr.toString().replace('%', '').trim());
   if (isNaN(num)) return null;
 
-  // 將數值限制在 -5 到 +5 之間，並映射到 0 ~ 1 的比例 ( -5 為 0，+5 為 1 )
   const clamped = Math.min(Math.max(num, -5), 5);
   const ratio = (clamped + 5) / 10;
 
-  // 紅色 (#dc3545 -> rgb(220, 53, 69)) 到 綠色 (#28a745 -> rgb(40, 167, 69))
   const r = Math.round(220 + (40 - 220) * ratio);
   const g = Math.round(53 + (167 - 53) * ratio);
   const b = Math.round(69 + (69 - 69) * ratio);
@@ -114,7 +112,6 @@ app.get('/', async (req, res) => {
     const colOffsets = [0, 50, 100]; 
     const rowOffsets = [0, 24, 48];
 
-    // 🌟 設定表格整體最小寬度為 950px，確保右側 W, X, Y 欄位在手機上能橫向滑動查看而不被壓縮
     let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 950px; border-collapse: separate; border-spacing: 0; font-family: Arial, sans-serif; font-size: ${tableFontSize}; table-layout: auto;">`;
     
     rows.forEach((row, rowIndex) => {
@@ -173,33 +170,25 @@ app.get('/', async (req, res) => {
 
         if (isAnalysisSheet) {
           if (colIndex === 0) {
-            // 分析表 A 欄：寬度縮小 70% (約 13px)
             cellWidthStyle = 'min-width: 13px; width: 13px;';
             cellPaddingStyle = '1px 0px;';
           } else if ([6, 7, 8].includes(colIndex)) {
-            // G欄(6)、H欄(7)、I欄(8)：維持緊湊
             cellWidthStyle = 'width: 1px; white-space: nowrap;';
             cellPaddingStyle = '1px 0px;';
           } else if (colIndex === 18) {
-            // S 欄：變寬 300%
             cellWidthStyle = 'min-width: 132px; width: 132px;';
           } else if ([21, 22, 23, 24].includes(colIndex)) {
-            // V欄(21)、W欄(22)、X欄(23)、Y欄(24)：一律強烈設定最小寬度 44px 且自動白空不折行，防止手機擠壓
             cellWidthStyle = 'min-width: 44px; width: 44px; white-space: nowrap;';
           }
 
-          // A3:N103 統一底色
           if (colIndex >= 0 && colIndex <= 13 && rowIndex >= 2 && rowIndex <= 102) {
             cellBgColor = '#f1f5f9';
             cellInputBg = '#f1f5f9';
-          }
-          // R3:Y22 統一底色
-          else if (colIndex >= 17 && colIndex <= 24 && rowIndex >= 2 && rowIndex <= 21) {
+          } else if (colIndex >= 17 && colIndex <= 24 && rowIndex >= 2 && rowIndex <= 21) {
             cellBgColor = '#e2e8f0';
             cellInputBg = '#e2e8f0';
           }
 
-          // T3:T22 色階 (100% 綠 -> 0% 灰)
           if (colIndex === 19 && rowIndex >= 2 && rowIndex <= 21) {
             const grad = getGreenGrayGradientColor(cellValue);
             if (grad) {
@@ -209,7 +198,6 @@ app.get('/', async (req, res) => {
             }
           }
 
-          // U3:U22 色階 (100% 綠 -> 0% 紅)
           if (colIndex === 20 && rowIndex >= 2 && rowIndex <= 21) {
             const grad = getRedGreenGradientColor(cellValue);
             if (grad) {
@@ -219,7 +207,6 @@ app.get('/', async (req, res) => {
             }
           }
 
-          // 🌟 新增：W3:W22 色階 ( >=5 綠 -> <=-5 紅) (colIndex 22, rowIndex 2~21)
           if (colIndex === 22 && rowIndex >= 2 && rowIndex <= 21) {
             const grad = getWColumnGradientColor(cellValue);
             if (grad) {
@@ -284,14 +271,39 @@ app.get('/', async (req, res) => {
                 ${filterHeaderHtml}
               </td>`;
           } else {
-            const inputWidthCss = (isAnalysisSheet && [6, 7, 8].includes(colIndex)) 
-              ? 'width: 100%; box-sizing: border-box;' 
-              : 'width: 92%;';
+            // 🌟 判斷是否為「輸入資料」分頁的 I欄(colIndex 8) 或 J欄(colIndex 9) 的下拉選單 (列 2~101，即 rowIndex 1~100)
+            const isDropdownI = isInputSheet && colIndex === 8 && rowIndex >= 1 && rowIndex <= 100;
+            const isDropdownJ = isInputSheet && colIndex === 9 && rowIndex >= 1 && rowIndex <= 100;
 
-            tableHtml += `
-              <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss} ${cellWidthStyle}">
-                <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="${inputWidthCss} padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" oninput="handleInputLiveCalc(this, ${rowIndex}, ${colIndex})" />
-              </td>`;
+            if (isDropdownI || isDropdownJ) {
+              const options = isDropdownI 
+                ? ['鬼才', '變化', '直球'] 
+                : ['變化', '直球'];
+
+              // 若目前沒有值，預設為第一個選項
+              const currentVal = cellValue.toString().trim() || options[0];
+
+              const optionsHtml = options.map(opt => {
+                const selected = (currentVal === opt) ? 'selected' : '';
+                return `<option value="${opt}" ${selected}>${opt}</option>`;
+              }).join('');
+
+              tableHtml += `
+                <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss} ${cellWidthStyle}">
+                  <select class="cell-input" data-col="${colIndex}" style="width: 100%; padding: 1px 0; border: 1px solid #cbd5e1; border-radius: 3px; font-size: ${tableFontSize}; background-color: #ffffff; cursor: pointer; text-align: center;">
+                    ${optionsHtml}
+                  </select>
+                </td>`;
+            } else {
+              const inputWidthCss = (isAnalysisSheet && [6, 7, 8].includes(colIndex)) 
+                ? 'width: 100%; box-sizing: border-box;' 
+                : 'width: 92%;';
+
+              tableHtml += `
+                <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss} ${cellWidthStyle}">
+                  <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="${inputWidthCss} padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" oninput="handleInputLiveCalc(this, ${rowIndex}, ${colIndex})" />
+                </td>`;
+            }
           }
         }
       });
@@ -372,7 +384,7 @@ app.get('/', async (req, res) => {
               const rowValues = {};
               tds.forEach(td => {
                 const cIdx = parseInt(td.getAttribute('data-col'));
-                const inp = td.querySelector('input');
+                const inp = td.querySelector('.cell-input');
                 rowValues[cIdx] = inp ? inp.value : td.innerText.trim();
               });
 
@@ -412,7 +424,7 @@ app.get('/', async (req, res) => {
 
               tds.forEach(td => {
                 const cIdx = parseInt(td.getAttribute('data-col'));
-                const inp = td.querySelector('input');
+                const inp = td.querySelector('.cell-input');
                 if (inp) {
                   inp.value = sortedRowData[cIdx] !== undefined ? sortedRowData[cIdx] : '';
                 }
@@ -439,7 +451,7 @@ app.get('/', async (req, res) => {
                 }
                 return headerVals;
               }
-              const inputs = tr.querySelectorAll('input');
+              const inputs = tr.querySelectorAll('.cell-input');
               const rowVals = [];
               
               inputs.forEach(input => {
