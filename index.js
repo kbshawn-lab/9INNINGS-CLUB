@@ -28,6 +28,28 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
+// 🎨 計算 T 欄百分比漸層色 (0% 灰色 #e2e8f0 -> 100% 綠色 #28a745)
+function getGreenGradientColor(valStr) {
+  if (!valStr) return null;
+  const num = parseFloat(valStr.toString().replace('%', '').trim());
+  if (isNaN(num)) return null;
+
+  // 限制比例在 0 ~ 1 之間
+  const ratio = Math.min(Math.max(num / 100, 0), 1);
+
+  // 起始色 (灰色): #e2e8f0 -> RGB(226, 232, 240)
+  // 結束色 (綠色): #28a745 -> RGB(40, 167, 69)
+  const r = Math.round(226 + (40 - 226) * ratio);
+  const g = Math.round(232 + (167 - 232) * ratio);
+  const b = Math.round(240 + (69 - 240) * ratio);
+
+  return {
+    bg: `rgb(${r}, ${g}, ${b})`,
+    // 當背景顏色較深時文字自動變白以維持可讀性
+    text: ratio > 0.6 ? '#ffffff' : '#333333'
+  };
+}
+
 // 🌐 1. 首頁
 app.get('/', async (req, res) => {
   const currentSheet = req.query.sheet || '';
@@ -45,10 +67,10 @@ app.get('/', async (req, res) => {
     const isAnalysisSheet = targetSheet.includes("分析表");
     const isTotalSheet = targetSheet.includes("總紀錄");
 
-    // 抓取該分頁資料 (範圍 A1:Z100)
+    // 抓取該分頁資料 (範圍 A1:Z103)
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `'${targetSheet}'!A1:Z100`,
+      range: `'${targetSheet}'!A1:Z103`,
     });
 
     const rows = response.data.values || [];
@@ -76,7 +98,7 @@ app.get('/', async (req, res) => {
     
     // 產生表格內容
     rows.forEach((row, rowIndex) => {
-      // 🎨 判斷「輸入資料」與「預設」的 5 列分組色塊 (排除第 1 列 rowIndex 0)
+      // 🎨 判斷 5 列分組色塊
       let rowBgColor = '#ffffff';
       let rowInputBg = '#fafafa';
 
@@ -99,6 +121,7 @@ app.get('/', async (req, res) => {
         // 🎨 決定儲存格背景顏色
         let cellBgColor = rowBgColor;
         let cellInputBg = rowInputBg;
+        let customTextColor = '';
 
         if (isAnalysisSheet) {
           // 分析表專屬：第 3 欄起 (colIndex >= 2)，每 5 欄換色色塊
@@ -110,6 +133,16 @@ app.get('/', async (req, res) => {
             } else {
               cellBgColor = '#ffffff';
               cellInputBg = '#fafafa';
+            }
+          }
+
+          // 🟢 綠色漸層：分析表 T3:T22 (rowIndex 2~21, Column T 為 colIndex 19)
+          if (colIndex === 19 && rowIndex >= 2 && rowIndex <= 21) {
+            const grad = getGreenGradientColor(cellValue);
+            if (grad) {
+              cellBgColor = grad.bg;
+              cellInputBg = grad.bg;
+              customTextColor = `color: ${grad.text}; font-weight: bold;`;
             }
           }
         }
@@ -129,7 +162,7 @@ app.get('/', async (req, res) => {
           stickyCss = `position: sticky; left: ${colOffsets[colIndex]}px; z-index: 10; background-color: ${cellBgColor};`;
         }
 
-        // 🔒 權限管控判斷：僅允許在「輸入資料」分頁的 B2:J101 (rowIndex 1~100, colIndex 1~9，即 Column B~J) 編輯
+        // 🔒 權限管控判斷：僅允許在「輸入資料」分頁的 B2:J101 (rowIndex 1~100, colIndex 1~9) 編輯
         const isEditable = isInputSheet && (rowIndex >= 1 && rowIndex <= 100) && (colIndex >= 1 && colIndex <= 9);
         const readonlyAttr = isEditable ? '' : 'readonly';
         const cursorStyle = isEditable ? 'cursor: text;' : 'cursor: not-allowed; opacity: 0.8;';
@@ -140,10 +173,27 @@ app.get('/', async (req, res) => {
           tableHtml += `<th style="padding: ${thPadding}; border: 1px solid #ccc; font-size: ${tableFontSize}; white-space: nowrap; ${stickyCss}">${headerText}</th>`;
         } else {
           // 一般資料列
-          tableHtml += `
-            <td style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss}">
-              <input type="text" class="cell-input" value="${cellValue}" ${readonlyAttr} style="width: 92%; min-width: ${minInputWidth}; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle}" />
-            </td>`;
+          // 🔍 如果是分析表且在 A3:N3 範圍 (rowIndex 2, colIndex 0~13)，放置篩選/排序介面
+          let filterHeaderHtml = '';
+          if (isAnalysisSheet && rowIndex === 2 && colIndex <= 13) {
+            filterHeaderHtml = `
+              <div style="display:flex; align-items:center; justify-content:center; gap:2px; margin-bottom:2px;">
+                <span style="font-weight:bold; font-size:8px;">${cellValue}</span>
+                <button onclick="sortTable(${colIndex}, 'asc')" style="padding:0 2px; font-size:7px; cursor:pointer;" title="升遞排序">▲</button>
+                <button onclick="sortTable(${colIndex}, 'desc')" style="padding:0 2px; font-size:7px; cursor:pointer;" title="降遞排序">▼</button>
+              </div>
+              <input type="text" placeholder="篩選..." onkeyup="filterTable(${colIndex}, this.value)" style="width:85%; font-size:7px; padding:1px; border:1px solid #94a3b8; border-radius:2px;" />
+            `;
+            tableHtml += `
+              <td style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; background-color: #dbeafe; ${stickyCss}">
+                ${filterHeaderHtml}
+              </td>`;
+          } else {
+            tableHtml += `
+              <td style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss}">
+                <input type="text" class="cell-input" value="${cellValue}" ${readonlyAttr} style="width: 92%; min-width: ${minInputWidth}; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" />
+              </td>`;
+          }
         }
       });
 
@@ -177,6 +227,7 @@ app.get('/', async (req, res) => {
           .save-btn { background-color: #28a745; color: white; font-size: 13px; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
           .save-btn:hover { background-color: #218838; }
           .save-btn:disabled { background-color: #6c757d; cursor: not-allowed; }
+          .reset-btn { background-color: #6c757d; color: white; font-size: 11px; padding: 4px 8px; border: none; border-radius: 3px; cursor: pointer; margin-left: 8px; }
           .nav-container { display: flex; gap: 6px; margin-bottom: 4px; overflow-x: auto; padding-bottom: 4px; white-space: nowrap; }
           
           /* 表格外框容器 */
@@ -212,6 +263,72 @@ app.get('/', async (req, res) => {
         </div>
 
         <script>
+          // 🔍 前端動態篩選功能 (A3:N103 範圍)
+          const activeFilters = {};
+
+          function filterTable(colIndex, keyword) {
+            activeFilters[colIndex] = keyword.toLowerCase().trim();
+            applyFiltersAndSort();
+          }
+
+          function applyFiltersAndSort() {
+            const table = document.getElementById('dataTable');
+            const rows = Array.from(table.querySelectorAll('tr'));
+
+            // 資料列範圍 (Row index 3 至 102，即 Row 4~103)
+            rows.forEach(tr => {
+              const rIdx = parseInt(tr.getAttribute('data-row'));
+              if (rIdx >= 3 && rIdx <= 102) {
+                const inputs = tr.querySelectorAll('input');
+                let isMatch = true;
+
+                for (const [cIdx, kw] of Object.entries(activeFilters)) {
+                  if (kw && inputs[cIdx]) {
+                    const val = inputs[cIdx].value.toLowerCase();
+                    if (!val.includes(kw)) {
+                      isMatch = false;
+                      break;
+                    }
+                  }
+                }
+                tr.style.display = isMatch ? '' : 'none';
+              }
+            });
+          }
+
+          // ↕️ 前端動態排序功能 (僅重排畫面，不修改後端與 Google 試算表)
+          function sortTable(colIndex, direction) {
+            const table = document.getElementById('dataTable');
+            const allRows = Array.from(table.querySelectorAll('tr'));
+            
+            // 抓取 Row Index 3~102 (A4:N103) 進行排序
+            const targetRows = allRows.filter(tr => {
+              const rIdx = parseInt(tr.getAttribute('data-row'));
+              return rIdx >= 3 && rIdx <= 102;
+            });
+
+            targetRows.sort((a, b) => {
+              const valA = (a.querySelectorAll('input')[colIndex]?.value || '').trim();
+              const valB = (b.querySelectorAll('input')[colIndex]?.value || '').trim();
+
+              const numA = parseFloat(valA.replace('%', ''));
+              const numB = parseFloat(valB.replace('%', ''));
+
+              let result = 0;
+              if (!isNaN(numA) && !isNaN(numB)) {
+                result = numA - numB;
+              } else {
+                result = valA.localeCompare(valB, 'zh-TW');
+              }
+
+              return direction === 'asc' ? result : -result;
+            });
+
+            // 將排序後的 DOM 節點重新串回表格底部
+            const tbody = table.querySelector('tbody') || table;
+            targetRows.forEach(tr => tbody.appendChild(tr));
+          }
+
           async function saveData() {
             const btn = document.querySelector('.save-btn');
             if (!btn) return;
@@ -288,17 +405,14 @@ app.post('/api/update', async (req, res) => {
 
     const existingValues = existingRes.data.values || [];
 
-    // 🔒 安全保護：僅允許寫入 B2:J101，K 欄與其他欄位強制保持試算表原本內容
+    // 🔒 安全保護：僅允許寫入 B2:J101，其他欄位與分頁保持試算表原本內容
     const safeValues = values.map((row, rIdx) => {
       return row.map((val, cIdx) => {
-        // 僅允許更新 Column B~J (cIdx 1~9) 且 Row 2~101 (rIdx 1~100)
-        // K 欄 (cIdx 10) 會被歸類為非可編輯欄位，直接保留原本線上的公式/資料
         const isEditableCell = (rIdx >= 1 && rIdx <= 100) && (cIdx >= 1 && cIdx <= 9);
         
         if (isEditableCell) {
           return val;
         } else {
-          // 完全不拿前端回傳的值，直接使用原本試算表內的內容/公式
           return (existingValues[rIdx] && existingValues[rIdx][cIdx] !== undefined) 
             ? existingValues[rIdx][cIdx] 
             : '';
