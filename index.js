@@ -267,7 +267,6 @@ app.get('/', async (req, res) => {
             rows.forEach(tr => {
               const rIdx = parseInt(tr.getAttribute('data-row'));
               if (rIdx >= 3 && rIdx <= 102) {
-                // 精準只抓取 A~N 欄 (colIndex <= 13)
                 const leftCells = Array.from(tr.querySelectorAll('td')).filter(td => {
                   const cIdx = parseInt(td.getAttribute('data-col'));
                   return cIdx <= 13;
@@ -296,33 +295,45 @@ app.get('/', async (req, res) => {
             });
           }
 
-          // ↕️ 修正後的獨立排序邏輯（完全隔離 A~N 與右側 R~Y 欄）
-          function sortTable(colIndex, direction) {
+          // ↕️ 純【數據重排】邏輯：DOM 完全不移動，防範右側欄位跑位，且空白永遠排最後！
+          function sortTable(targetColIndex, direction) {
             const table = document.getElementById('dataTable');
+            
+            // 抓取第 4 列到第 103 列 (rowIndex 3~102)
             const rows = Array.from(table.querySelectorAll('tr')).filter(tr => {
               const rIdx = parseInt(tr.getAttribute('data-row'));
               return rIdx >= 3 && rIdx <= 102;
             });
 
-            // 1. 精準抓取每一列【真正的 A~N 欄】(colIndex <= 13)
-            const leftBlocks = rows.map(tr => {
-              const tds = Array.from(tr.querySelectorAll('td'));
-              return tds.filter(td => {
+            // 1. 提取 A~N 欄 (colIndex 0 ~ 13) 的所有資料 (保持多欄陣列結構)
+            const rowDataList = rows.map(tr => {
+              const tds = Array.from(tr.querySelectorAll('td')).filter(td => {
                 const cIdx = parseInt(td.getAttribute('data-col'));
                 return cIdx <= 13;
               });
+
+              const rowValues = {};
+              tds.forEach(td => {
+                const cIdx = parseInt(td.getAttribute('data-col'));
+                const inp = td.querySelector('input');
+                rowValues[cIdx] = inp ? inp.value : td.innerText.trim();
+              });
+
+              return rowValues;
             });
 
-            // 2. 依照指定欄位數值進行排序
-            leftBlocks.sort((blockA, blockB) => {
-              const tdA = blockA.find(td => parseInt(td.getAttribute('data-col')) === colIndex);
-              const tdB = blockB.find(td => parseInt(td.getAttribute('data-col')) === colIndex);
+            // 2. 進行數據排序
+            rowDataList.sort((a, b) => {
+              const valA = (a[targetColIndex] || '').trim();
+              const valB = (b[targetColIndex] || '').trim();
 
-              const inpA = tdA ? tdA.querySelector('input') : null;
-              const inpB = tdB ? tdB.querySelector('input') : null;
+              const isEmptyA = valA === '';
+              const isEmptyB = valB === '';
 
-              const valA = ((inpA ? inpA.value : tdA?.innerText) || '').trim();
-              const valB = ((inpB ? inpB.value : tdB?.innerText) || '').trim();
+              // 🌟 需求：空白格永遠排在最下方
+              if (isEmptyA && isEmptyB) return 0;
+              if (isEmptyA) return 1;  // A 是空的，往後排
+              if (isEmptyB) return -1; // B 是空的，往後排
 
               const numA = parseFloat(valA.replace('%', ''));
               const numB = parseFloat(valB.replace('%', ''));
@@ -337,20 +348,25 @@ app.get('/', async (req, res) => {
               return direction === 'asc' ? result : -result;
             });
 
-            // 3. 安全填回：找到第一個右側欄位 (data-col >= 14)，確保左側區塊全數插入在它之前
-            rows.forEach((tr, index) => {
-              const sortedBlock = leftBlocks[index];
-              const tds = Array.from(tr.querySelectorAll('td'));
-              const anchorCell = tds.find(td => parseInt(td.getAttribute('data-col')) >= 14);
+            // 3. 將排序完成後的數值重新塞回畫面上的 <input> (完全不碰 DOM 結構，右側永遠不會被影響)
+            rows.forEach((tr, rowIndex) => {
+              const sortedRowData = rowDataList[rowIndex];
+              const tds = Array.from(tr.querySelectorAll('td')).filter(td => {
+                const cIdx = parseInt(td.getAttribute('data-col'));
+                return cIdx <= 13;
+              });
 
-              sortedBlock.forEach(td => {
-                if (anchorCell) {
-                  tr.insertBefore(td, anchorCell);
-                } else {
-                  tr.appendChild(td);
+              tds.forEach(td => {
+                const cIdx = parseInt(td.getAttribute('data-col'));
+                const inp = td.querySelector('input');
+                if (inp) {
+                  inp.value = sortedRowData[cIdx] !== undefined ? sortedRowData[cIdx] : '';
                 }
               });
             });
+
+            // 重新套用篩選機制
+            applyFiltersAndSort();
           }
 
           async function saveData() {
