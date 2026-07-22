@@ -119,7 +119,7 @@ app.get('/', async (req, res) => {
 
       tableHtml += `<tr style="background-color: ${rowBgColor};" data-row="${rowIndex}">`;
 
-      // 🌟 計算「輸入資料」分頁的 L 欄 (rowIndex 1~100 即 L2:L101)
+      // 「輸入資料」分頁的 L 欄 (rowIndex 1~100 即 L2:L101) 計算
       let calculatedLValue = null;
       if (isInputSheet && rowIndex >= 1 && rowIndex <= 100) {
         const valF = parseFloat(row[5]) || 0; // F欄 (colIndex 5)
@@ -139,7 +139,7 @@ app.get('/', async (req, res) => {
 
         let cellValue = val || '';
 
-        // 🌟 「輸入資料」分頁 L 欄 (colIndex 11, L2:L101) 帶入計算值
+        // 「輸入資料」分頁 L 欄 (colIndex 11, L2:L101) 帶入計算值
         if (isInputSheet && colIndex === 11 && calculatedLValue !== null) {
           cellValue = calculatedLValue;
         }
@@ -153,7 +153,7 @@ app.get('/', async (req, res) => {
 
         if (isAnalysisSheet) {
           if (colIndex === 0) {
-            // 🌟 分析表 A 欄：寬度縮小 70% (改為約 13px)
+            // 分析表 A 欄：寬度縮小 70% (改為約 13px)
             cellWidthStyle = 'min-width: 13px; width: 13px;';
             cellPaddingStyle = '1px 0px;';
           } else if (colIndex === 18) {
@@ -225,27 +225,29 @@ app.get('/', async (req, res) => {
         } else {
           let filterHeaderHtml = '';
           if (isAnalysisSheet && rowIndex === 2 && colIndex <= 13) {
-            // 🌟 需求：分析表 A 欄 (colIndex 0) 取消篩選，僅保留排序按鈕
+            // 🌟 需求 1 & 2：分析表 A3:N3 樣式調整
             if (colIndex === 0) {
+              // A 欄：排序按鈕改為上下顯示 (flex-direction: column)
               filterHeaderHtml = `
-                <div style="display:flex; align-items:center; justify-content:center; gap:1px;">
-                  <button onclick="sortTable(${colIndex}, 'asc')" style="padding:0; font-size:6px; cursor:pointer;" title="升遞排序">▲</button>
-                  <button onclick="sortTable(${colIndex}, 'desc')" style="padding:0; font-size:6px; cursor:pointer;" title="降遞排序">▼</button>
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0px; height:100%;">
+                  <button onclick="sortTable(${colIndex}, 'asc')" style="padding:0; font-size:6px; line-height:8px; cursor:pointer; border:none; background:transparent;" title="升遞排序">▲</button>
+                  <button onclick="sortTable(${colIndex}, 'desc')" style="padding:0; font-size:6px; line-height:8px; cursor:pointer; border:none; background:transparent;" title="降遞排序">▼</button>
                 </div>
               `;
             } else {
+              // B~N 欄 (rowIndex === 2 即第三列)：文字保持水平、欄高縮小至與其他列相同 (padding: 1px)
               filterHeaderHtml = `
-                <div style="display:flex; align-items:center; justify-content:center; gap:2px; margin-bottom:2px;">
+                <div style="display:flex; align-items:center; justify-content:center; gap:2px; margin-bottom:1px; writing-mode: horizontal-tb; white-space: nowrap;">
                   <span style="font-weight:bold; font-size:8px;">${cellValue}</span>
-                  <button onclick="sortTable(${colIndex}, 'asc')" style="padding:0 2px; font-size:7px; cursor:pointer;" title="升遞排序">▲</button>
-                  <button onclick="sortTable(${colIndex}, 'desc')" style="padding:0 2px; font-size:7px; cursor:pointer;" title="降遞排序">▼</button>
+                  <button onclick="sortTable(${colIndex}, 'asc')" style="padding:0 1px; font-size:7px; cursor:pointer;" title="升遞排序">▲</button>
+                  <button onclick="sortTable(${colIndex}, 'desc')" style="padding:0 1px; font-size:7px; cursor:pointer;" title="降遞排序">▼</button>
                 </div>
-                <input type="text" placeholder="篩選..." onkeyup="filterTable(${colIndex}, this.value)" style="width:85%; font-size:7px; padding:1px; border:1px solid #94a3b8; border-radius:2px;" />
+                <input type="text" placeholder="篩選..." onkeyup="filterTable(${colIndex}, this.value)" style="width:85%; font-size:7px; padding:0px 1px; border:1px solid #94a3b8; border-radius:2px;" />
               `;
             }
 
             tableHtml += `
-              <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: #dbeafe; ${stickyCss}">
+              <td class="table-cell" data-col="${colIndex}" style="padding: 1px; border: 1px solid #cbd5e1; text-align: center; background-color: #dbeafe; ${stickyCss}">
                 ${filterHeaderHtml}
               </td>`;
           } else {
@@ -300,7 +302,6 @@ app.get('/', async (req, res) => {
         <script>
           const activeFilters = {};
 
-          // 🌟 前端輸入即時連動計算：輸入 F 或 G 欄時，即時試算並更新 L 欄 (L = F - G)
           function handleInputLiveCalc(inputEl, rowIndex, colIndex) {
             if (!"${isInputSheet}" || rowIndex < 1 || rowIndex > 100) return;
             if (colIndex !== 5 && colIndex !== 6) return;
@@ -520,7 +521,6 @@ app.post('/api/update', async (req, res) => {
         let isEditableCell = false;
 
         if (isInputSheet) {
-          // 🌟 嚴格確保只寫回可編輯區域 (B~J欄 / colIndex 1~9)，L 欄 (colIndex 11) 屬於唯讀，不寫回！
           isEditableCell = (rIdx >= 1 && rIdx <= 100) && (cIdx >= 1 && cIdx <= 9);
         } else if (isAnalysisSheet) {
           const isS3toS22 = (cIdx === 18 && rIdx >= 2 && rIdx <= 21);
@@ -531,7 +531,6 @@ app.post('/api/update', async (req, res) => {
         if (isEditableCell) {
           return val !== undefined ? val : '';
         } else {
-          // 唯讀欄位（如 L 欄公式）保留 Google 試算表原本的公式/值
           return (existingValues[rIdx] && existingValues[rIdx][cIdx] !== undefined) 
             ? existingValues[rIdx][cIdx] 
             : '';
