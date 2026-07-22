@@ -28,7 +28,7 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-// 🎨 計算 U 欄百分比漸層色 (100% 綠色 #28a745 -> 0% 紅色 #dc3545)
+// 🎨 U 欄百分比漸層色 (100% 綠色 #28a745 -> 0% 紅色 #dc3545)
 function getRedGreenGradientColor(valStr) {
   if (!valStr) return null;
   const num = parseFloat(valStr.toString().replace('%', '').trim());
@@ -42,16 +42,13 @@ function getRedGreenGradientColor(valStr) {
   return { bg: `rgb(${r}, ${g}, ${b})`, text: '#ffffff' };
 }
 
-// 🎨 需求 1：計算 T 欄百分比漸層色 (100% 綠色 #28a745 -> 0% 灰色 #6c757d)
+// 🎨 T 欄百分比漸層色 (100% 綠色 #28a745 -> 0% 灰色 #6c757d)
 function getGreenGrayGradientColor(valStr) {
   if (!valStr) return null;
   const num = parseFloat(valStr.toString().replace('%', '').trim());
   if (isNaN(num)) return null;
 
   const ratio = Math.min(Math.max(num / 100, 0), 1);
-
-  // 起始色 (灰色): #6c757d -> RGB(108, 117, 125)
-  // 結束色 (綠色): #28a745 -> RGB(40, 167, 69)
   const r = Math.round(108 + (40 - 108) * ratio);
   const g = Math.round(117 + (167 - 117) * ratio);
   const b = Math.round(125 + (69 - 125) * ratio);
@@ -140,7 +137,7 @@ app.get('/', async (req, res) => {
             cellInputBg = '#e2e8f0';
           }
 
-          // 需求 1：T3:T22 (colIndex 19, rowIndex 2~21) 色階 (100% 綠 -> 0% 灰)
+          // T3:T22 (colIndex 19, rowIndex 2~21) 色階 (100% 綠 -> 0% 灰)
           if (colIndex === 19 && rowIndex >= 2 && rowIndex <= 21) {
             const grad = getGreenGrayGradientColor(cellValue);
             if (grad) {
@@ -202,13 +199,12 @@ app.get('/', async (req, res) => {
               <input type="text" placeholder="篩選..." onkeyup="filterTable(${colIndex}, this.value)" style="width:85%; font-size:7px; padding:1px; border:1px solid #94a3b8; border-radius:2px;" />
             `;
             tableHtml += `
-              <td class="left-section-cell" data-col="${colIndex}" style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; background-color: #dbeafe; ${stickyCss}">
+              <td class="table-cell" data-col="${colIndex}" style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; background-color: #dbeafe; ${stickyCss}">
                 ${filterHeaderHtml}
               </td>`;
           } else {
-            const cellClass = (colIndex <= 13) ? 'left-section-cell' : 'right-section-cell';
             tableHtml += `
-              <td class="${cellClass}" data-col="${colIndex}" style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss}">
+              <td class="table-cell" data-col="${colIndex}" style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss}">
                 <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="width: 92%; min-width: ${minInputWidth}; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" />
               </td>`;
           }
@@ -258,7 +254,7 @@ app.get('/', async (req, res) => {
         <script>
           const activeFilters = {};
 
-          // 🔍 需求 2：僅針對 A~N 欄 (colIndex 0~13) 隱藏/顯示，不影響 O~Y 欄
+          // 🔍 僅對 A~N 欄 (colIndex <= 13) 隱藏/顯示
           function filterTable(colIndex, keyword) {
             activeFilters[colIndex] = keyword.toLowerCase().trim();
             applyFiltersAndSort();
@@ -271,7 +267,12 @@ app.get('/', async (req, res) => {
             rows.forEach(tr => {
               const rIdx = parseInt(tr.getAttribute('data-row'));
               if (rIdx >= 3 && rIdx <= 102) {
-                const leftCells = Array.from(tr.querySelectorAll('.left-section-cell'));
+                // 精準只抓取 A~N 欄 (colIndex <= 13)
+                const leftCells = Array.from(tr.querySelectorAll('td')).filter(td => {
+                  const cIdx = parseInt(td.getAttribute('data-col'));
+                  return cIdx <= 13;
+                });
+
                 let isMatch = true;
 
                 for (const [cIdx, kw] of Object.entries(activeFilters)) {
@@ -288,7 +289,6 @@ app.get('/', async (req, res) => {
                   }
                 }
 
-                // 僅對左側 A~N 欄的 td 調整透明度/隱藏內容，保持表格結構不崩潰
                 leftCells.forEach(td => {
                   td.style.visibility = isMatch ? 'visible' : 'hidden';
                 });
@@ -296,7 +296,7 @@ app.get('/', async (req, res) => {
             });
           }
 
-          // ↕️ 需求 2：僅針對 A~N 欄 (colIndex 0~13) 重新排序，右側 O~Y 欄不動
+          // ↕️ 修正後的獨立排序邏輯（完全隔離 A~N 與右側 R~Y 欄）
           function sortTable(colIndex, direction) {
             const table = document.getElementById('dataTable');
             const rows = Array.from(table.querySelectorAll('tr')).filter(tr => {
@@ -304,12 +304,16 @@ app.get('/', async (req, res) => {
               return rIdx >= 3 && rIdx <= 102;
             });
 
-            // 1. 抽取每列 A~N 欄的元素集合
+            // 1. 精準抓取每一列【真正的 A~N 欄】(colIndex <= 13)
             const leftBlocks = rows.map(tr => {
-              return Array.from(tr.querySelectorAll('.left-section-cell'));
+              const tds = Array.from(tr.querySelectorAll('td'));
+              return tds.filter(td => {
+                const cIdx = parseInt(td.getAttribute('data-col'));
+                return cIdx <= 13;
+              });
             });
 
-            // 2. 依照指定 colIndex 排序區塊
+            // 2. 依照指定欄位數值進行排序
             leftBlocks.sort((blockA, blockB) => {
               const tdA = blockA.find(td => parseInt(td.getAttribute('data-col')) === colIndex);
               const tdB = blockB.find(td => parseInt(td.getAttribute('data-col')) === colIndex);
@@ -333,13 +337,15 @@ app.get('/', async (req, res) => {
               return direction === 'asc' ? result : -result;
             });
 
-            // 3. 將排序後的左側 DOM 重新填回各列的最前面
+            // 3. 安全填回：找到第一個右側欄位 (data-col >= 14)，確保左側區塊全數插入在它之前
             rows.forEach((tr, index) => {
               const sortedBlock = leftBlocks[index];
-              const firstRightCell = tr.querySelector('.right-section-cell');
+              const tds = Array.from(tr.querySelectorAll('td'));
+              const anchorCell = tds.find(td => parseInt(td.getAttribute('data-col')) >= 14);
+
               sortedBlock.forEach(td => {
-                if (firstRightCell) {
-                  tr.insertBefore(td, firstRightCell);
+                if (anchorCell) {
+                  tr.insertBefore(td, anchorCell);
                 } else {
                   tr.appendChild(td);
                 }
