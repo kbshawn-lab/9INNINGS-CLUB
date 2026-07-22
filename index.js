@@ -8,7 +8,8 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-const SPREADSHEET_ID = '1vCOUP980-AfHL67Duma6h6aqq2YEuBmsV0MfeHsS1Qc';
+// 🌟 修改：優先讀取環境變數 SPREADSHEET_ID，若未設定則使用預設的舊 ID
+const SPREADSHEET_ID = process.env.SPREADSHEET_ID || '1vCOUP980-AfHL67Duma6h6aqq2YEuBmsV0MfeHsS1Qc';
 
 // 讀取 Railway 憑證
 let credentials;
