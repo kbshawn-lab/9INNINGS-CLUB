@@ -91,7 +91,6 @@ app.get('/', async (req, res) => {
     const tableFontSize = '8.8px';
     const inputPadding = '1px 1px';
     const thPadding = '4px 3px';
-    const minInputWidth = '44px';
 
     const colOffsets = [0, 50, 100]; 
     const rowOffsets = [0, 24, 48];
@@ -106,10 +105,16 @@ app.get('/', async (req, res) => {
         const rowBlockGroup = Math.floor((rowIndex - 1) / 5);
         if (rowBlockGroup % 2 === 0) {
           rowBgColor = '#ffffff';
-          rowInputBg = '#fafafa';
+          rowInputBg = '#ffffff';
         } else {
-          rowBgColor = '#edf2f7';
-          rowInputBg = '#e2e8f0';
+          // 🌟 需求：僅在「輸入資料」分頁加強顏色差異，改用顯眼的深淺對比色
+          if (isInputSheet) {
+            rowBgColor = '#bae6fd';  // 強烈的天藍色底
+            rowInputBg = '#e0f2fe';
+          } else {
+            rowBgColor = '#edf2f7';
+            rowInputBg = '#e2e8f0';
+          }
         }
       }
 
@@ -120,12 +125,30 @@ app.get('/', async (req, res) => {
           return; // 隱藏 B 欄
         }
 
+        // 🌟 需求：分析表隱藏 Y 欄以後的所有欄位 (colIndex > 24)
+        if (isAnalysisSheet && colIndex > 24) {
+          return;
+        }
+
         const cellValue = val || '';
         let cellBgColor = rowBgColor;
         let cellInputBg = rowInputBg;
         let customTextColor = '';
 
+        // 🌟 計算欄位寬度與樣式 (針對分析表 A 欄與 S 欄調整)
+        let cellWidthStyle = 'min-width: 44px;';
+        let cellPaddingStyle = inputPadding;
+
         if (isAnalysisSheet) {
+          if (colIndex === 0) {
+            // A 欄：寬度縮小 50%
+            cellWidthStyle = 'min-width: 22px; width: 22px;';
+            cellPaddingStyle = '1px 0px;';
+          } else if (colIndex === 18) {
+            // S 欄：變寬 300%
+            cellWidthStyle = 'min-width: 132px; width: 132px;';
+          }
+
           // A3:N103 統一底色
           if (colIndex >= 0 && colIndex <= 13 && rowIndex >= 2 && rowIndex <= 102) {
             cellBgColor = '#f1f5f9';
@@ -137,7 +160,7 @@ app.get('/', async (req, res) => {
             cellInputBg = '#e2e8f0';
           }
 
-          // T3:T22 (colIndex 19, rowIndex 2~21) 色階 (100% 綠 -> 0% 灰)
+          // T3:T22 色階 (100% 綠 -> 0% 灰)
           if (colIndex === 19 && rowIndex >= 2 && rowIndex <= 21) {
             const grad = getGreenGrayGradientColor(cellValue);
             if (grad) {
@@ -147,7 +170,7 @@ app.get('/', async (req, res) => {
             }
           }
 
-          // U3:U22 (colIndex 20, rowIndex 2~21) 色階 (100% 綠 -> 0% 紅)
+          // U3:U22 色階 (100% 綠 -> 0% 紅)
           if (colIndex === 20 && rowIndex >= 2 && rowIndex <= 21) {
             const grad = getRedGreenGradientColor(cellValue);
             if (grad) {
@@ -186,7 +209,7 @@ app.get('/', async (req, res) => {
 
         if (rowIndex === 0) {
           const headerText = (isAnalysisSheet && colIndex === 24) ? `(Y欄) ${cellValue}` : cellValue;
-          tableHtml += `<th style="padding: ${thPadding}; border: 1px solid #ccc; font-size: ${tableFontSize}; white-space: nowrap; ${stickyCss}">${headerText}</th>`;
+          tableHtml += `<th style="padding: ${thPadding}; border: 1px solid #ccc; font-size: ${tableFontSize}; white-space: nowrap; ${stickyCss} ${cellWidthStyle}">${headerText}</th>`;
         } else {
           let filterHeaderHtml = '';
           if (isAnalysisSheet && rowIndex === 2 && colIndex <= 13) {
@@ -199,13 +222,13 @@ app.get('/', async (req, res) => {
               <input type="text" placeholder="篩選..." onkeyup="filterTable(${colIndex}, this.value)" style="width:85%; font-size:7px; padding:1px; border:1px solid #94a3b8; border-radius:2px;" />
             `;
             tableHtml += `
-              <td class="table-cell" data-col="${colIndex}" style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; background-color: #dbeafe; ${stickyCss}">
+              <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: #dbeafe; ${stickyCss}">
                 ${filterHeaderHtml}
               </td>`;
           } else {
             tableHtml += `
-              <td class="table-cell" data-col="${colIndex}" style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss}">
-                <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="width: 92%; min-width: ${minInputWidth}; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" />
+              <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss}">
+                <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="width: 92%; ${cellWidthStyle} padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" />
               </td>`;
           }
         }
@@ -254,7 +277,6 @@ app.get('/', async (req, res) => {
         <script>
           const activeFilters = {};
 
-          // 🔍 僅對 A~N 欄 (colIndex <= 13) 隱藏/顯示
           function filterTable(colIndex, keyword) {
             activeFilters[colIndex] = keyword.toLowerCase().trim();
             applyFiltersAndSort();
@@ -295,17 +317,14 @@ app.get('/', async (req, res) => {
             });
           }
 
-          // ↕️ 純【數據重排】邏輯：DOM 完全不移動，防範右側欄位跑位，且空白永遠排最後！
           function sortTable(targetColIndex, direction) {
             const table = document.getElementById('dataTable');
             
-            // 抓取第 4 列到第 103 列 (rowIndex 3~102)
             const rows = Array.from(table.querySelectorAll('tr')).filter(tr => {
               const rIdx = parseInt(tr.getAttribute('data-row'));
               return rIdx >= 3 && rIdx <= 102;
             });
 
-            // 1. 提取 A~N 欄 (colIndex 0 ~ 13) 的所有資料 (保持多欄陣列結構)
             const rowDataList = rows.map(tr => {
               const tds = Array.from(tr.querySelectorAll('td')).filter(td => {
                 const cIdx = parseInt(td.getAttribute('data-col'));
@@ -322,7 +341,6 @@ app.get('/', async (req, res) => {
               return rowValues;
             });
 
-            // 2. 進行數據排序
             rowDataList.sort((a, b) => {
               const valA = (a[targetColIndex] || '').trim();
               const valB = (b[targetColIndex] || '').trim();
@@ -330,10 +348,9 @@ app.get('/', async (req, res) => {
               const isEmptyA = valA === '';
               const isEmptyB = valB === '';
 
-              // 🌟 需求：空白格永遠排在最下方
               if (isEmptyA && isEmptyB) return 0;
-              if (isEmptyA) return 1;  // A 是空的，往後排
-              if (isEmptyB) return -1; // B 是空的，往後排
+              if (isEmptyA) return 1;  
+              if (isEmptyB) return -1; 
 
               const numA = parseFloat(valA.replace('%', ''));
               const numB = parseFloat(valB.replace('%', ''));
@@ -348,7 +365,6 @@ app.get('/', async (req, res) => {
               return direction === 'asc' ? result : -result;
             });
 
-            // 3. 將排序完成後的數值重新塞回畫面上的 <input> (完全不碰 DOM 結構，右側永遠不會被影響)
             rows.forEach((tr, rowIndex) => {
               const sortedRowData = rowDataList[rowIndex];
               const tds = Array.from(tr.querySelectorAll('td')).filter(td => {
@@ -365,7 +381,6 @@ app.get('/', async (req, res) => {
               });
             });
 
-            // 重新套用篩選機制
             applyFiltersAndSort();
           }
 
