@@ -95,7 +95,8 @@ app.get('/', async (req, res) => {
     const colOffsets = [0, 50, 100]; 
     const rowOffsets = [0, 24, 48];
 
-    let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 700px; border-collapse: separate; border-spacing: 0; font-family: Arial, sans-serif; font-size: ${tableFontSize};">`;
+    // 🌟 設定表格整體最小寬度為 950px，確保右側 W, X, Y 欄位在手機上能橫向滑動查看而不被壓縮
+    let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 950px; border-collapse: separate; border-spacing: 0; font-family: Arial, sans-serif; font-size: ${tableFontSize}; table-layout: auto;">`;
     
     rows.forEach((row, rowIndex) => {
       let rowBgColor = '#ffffff';
@@ -156,10 +157,6 @@ app.get('/', async (req, res) => {
             // 分析表 A 欄：寬度縮小 70% (約 13px)
             cellWidthStyle = 'min-width: 13px; width: 13px;';
             cellPaddingStyle = '1px 0px;';
-          } else if (colIndex === 2) {
-            // 🌟 1. C欄：寬度增加 20% (由 44px 增至 53px)
-            cellWidthStyle = 'min-width: 53px; width: 53px; white-space: nowrap;';
-            cellPaddingStyle = '1px 0px;';
           } else if ([6, 7, 8].includes(colIndex)) {
             // G欄(6)、H欄(7)、I欄(8)：維持緊湊
             cellWidthStyle = 'width: 1px; white-space: nowrap;';
@@ -167,10 +164,11 @@ app.get('/', async (req, res) => {
           } else if (colIndex === 18) {
             // S 欄：變寬 300%
             cellWidthStyle = 'min-width: 132px; width: 132px;';
-          } else if ([22, 23, 24].includes(colIndex)) {
-            // 🌟 2. W欄(22)、X欄(23)、Y欄(24)：擴大至與 V欄(21) 一樣 (min-width: 44px)
-            cellWidthStyle = 'min-width: 44px; width: 44px;';
+          } else if ([21, 22, 23, 24].includes(colIndex)) {
+            // 🌟 2. V欄(21)、W欄(22)、X欄(23)、Y欄(24)：一律強烈設定最小寬度 44px 且自動白空不折行，防止手機擠壓
+            cellWidthStyle = 'min-width: 44px; width: 44px; white-space: nowrap;';
           }
+          // 註：C 欄 (colIndex 2) 預設套用 cellWidthStyle = 'min-width: 44px;'，與 L 欄完全一致
 
           // A3:N103 統一底色
           if (colIndex >= 0 && colIndex <= 13 && rowIndex >= 2 && rowIndex <= 102) {
@@ -260,12 +258,12 @@ app.get('/', async (req, res) => {
                 ${filterHeaderHtml}
               </td>`;
           } else {
-            const inputWidthCss = (isAnalysisSheet && [2, 6, 7, 8].includes(colIndex)) 
+            const inputWidthCss = (isAnalysisSheet && [6, 7, 8].includes(colIndex)) 
               ? 'width: 100%; box-sizing: border-box;' 
               : 'width: 92%;';
 
             tableHtml += `
-              <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss}">
+              <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss} ${cellWidthStyle}">
                 <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="${inputWidthCss} padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" oninput="handleInputLiveCalc(this, ${rowIndex}, ${colIndex})" />
               </td>`;
           }
