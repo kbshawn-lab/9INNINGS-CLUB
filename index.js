@@ -28,8 +28,8 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-// 🎨 計算 T 欄百分比漸層色 (0% 灰色 #e2e8f0 -> 100% 綠色 #28a745)
-function getGreenGradientColor(valStr) {
+// 🎨 計算 U 欄百分比漸層色 (100% 綠色 #28a745 -> 0% 紅色 #dc3545)
+function getRedGreenGradientColor(valStr) {
   if (!valStr) return null;
   const num = parseFloat(valStr.toString().replace('%', '').trim());
   if (isNaN(num)) return null;
@@ -37,16 +37,16 @@ function getGreenGradientColor(valStr) {
   // 限制比例在 0 ~ 1 之間
   const ratio = Math.min(Math.max(num / 100, 0), 1);
 
-  // 起始色 (灰色): #e2e8f0 -> RGB(226, 232, 240)
+  // 起始色 (紅色): #dc3545 -> RGB(220, 53, 69)
   // 結束色 (綠色): #28a745 -> RGB(40, 167, 69)
-  const r = Math.round(226 + (40 - 226) * ratio);
-  const g = Math.round(232 + (167 - 232) * ratio);
-  const b = Math.round(240 + (69 - 240) * ratio);
+  const r = Math.round(220 + (40 - 220) * ratio);
+  const g = Math.round(53 + (167 - 53) * ratio);
+  const b = Math.round(69 + (69 - 69) * ratio);
 
   return {
     bg: `rgb(${r}, ${g}, ${b})`,
-    // 當背景顏色較深時文字自動變白以維持可讀性
-    text: ratio > 0.6 ? '#ffffff' : '#333333'
+    // 文字白/黑自動對比
+    text: '#ffffff'
   };
 }
 
@@ -83,7 +83,7 @@ app.get('/', async (req, res) => {
       return `<a href="/?sheet=${encodeURIComponent(name)}" style="text-decoration: none; padding: 5px 10px; font-size: 12px; border-radius: 4px; ${activeStyle}">${name}</a>`;
     }).join(' ');
 
-    // 統一表格字體與外觀縮小 80%
+    // 表格字體與尺寸設定
     const tableFontSize = '8.8px';
     const inputPadding = '1px 1px';
     const thPadding = '4px 3px';
@@ -91,14 +91,13 @@ app.get('/', async (req, res) => {
 
     // 左側 3 欄固定的寬度偏移（px）
     const colOffsets = [0, 50, 100]; 
-    // 頂端 3 列固定的高度偏移（px）
     const rowOffsets = [0, 24, 48];
 
     let tableHtml = `<table id="dataTable" style="width: 100%; min-width: 700px; border-collapse: separate; border-spacing: 0; font-family: Arial, sans-serif; font-size: ${tableFontSize};">`;
     
     // 產生表格內容
     rows.forEach((row, rowIndex) => {
-      // 🎨 判斷 5 列分組色塊
+      // 預設斑馬紋色塊
       let rowBgColor = '#ffffff';
       let rowInputBg = '#fafafa';
 
@@ -116,29 +115,33 @@ app.get('/', async (req, res) => {
       tableHtml += `<tr style="background-color: ${rowBgColor};" data-row="${rowIndex}">`;
 
       row.forEach((val, colIndex) => {
+        // 🙈 需求 2：分析表分頁中，隱藏 B 欄 (colIndex === 1)
+        if (isAnalysisSheet && colIndex === 1) {
+          return;
+        }
+
         const cellValue = val || '';
         
-        // 🎨 決定儲存格背景顏色
         let cellBgColor = rowBgColor;
         let cellInputBg = rowInputBg;
         let customTextColor = '';
 
         if (isAnalysisSheet) {
-          // 分析表專屬：第 3 欄起 (colIndex >= 2)，每 5 欄換色色塊
-          if (colIndex >= 2) {
-            const colBlockGroup = Math.floor((colIndex - 2) / 5);
-            if (colBlockGroup % 2 === 0) {
-              cellBgColor = '#edf2f7';
-              cellInputBg = '#e2e8f0';
-            } else {
-              cellBgColor = '#ffffff';
-              cellInputBg = '#fafafa';
-            }
+          // 🎨 需求 3：分析表底色統一設定
+          // A3:N103 (colIndex 0~13, rowIndex 2~102) 統一底色
+          if (colIndex >= 0 && colIndex <= 13 && rowIndex >= 2 && rowIndex <= 102) {
+            cellBgColor = '#f1f5f9';
+            cellInputBg = '#f1f5f9';
+          }
+          // R3:Y22 (colIndex 17~24, rowIndex 2~21) 統一底色
+          else if (colIndex >= 17 && colIndex <= 24 && rowIndex >= 2 && rowIndex <= 21) {
+            cellBgColor = '#e2e8f0';
+            cellInputBg = '#e2e8f0';
           }
 
-          // 🟢 綠色漸層：分析表 T3:T22 (rowIndex 2~21, Column T 為 colIndex 19)
-          if (colIndex === 19 && rowIndex >= 2 && rowIndex <= 21) {
-            const grad = getGreenGradientColor(cellValue);
+          // 🔴🟢 需求 1：U3:U22 (colIndex 20, rowIndex 2~21) 色階 (100% 綠 -> 0% 紅)
+          if (colIndex === 20 && rowIndex >= 2 && rowIndex <= 21) {
+            const grad = getRedGreenGradientColor(cellValue);
             if (grad) {
               cellBgColor = grad.bg;
               cellInputBg = grad.bg;
@@ -162,10 +165,20 @@ app.get('/', async (req, res) => {
           stickyCss = `position: sticky; left: ${colOffsets[colIndex]}px; z-index: 10; background-color: ${cellBgColor};`;
         }
 
-        // 🔒 權限管控判斷：僅允許在「輸入資料」分頁的 B2:J101 (rowIndex 1~100, colIndex 1~9) 編輯
-        const isEditable = isInputSheet && (rowIndex >= 1 && rowIndex <= 100) && (colIndex >= 1 && colIndex <= 9);
+        // 🔒 權限管控判斷：
+        // 1. 輸入資料分頁：B2:J101 可編輯
+        // 2. 需求 4 & 5 (分析表)：S3:S22 (colIndex 18, rowIndex 2~21) 與 U27 (colIndex 20, rowIndex 26) 開放編輯
+        let isEditable = false;
+        if (isInputSheet) {
+          isEditable = (rowIndex >= 1 && rowIndex <= 100) && (colIndex >= 1 && colIndex <= 9);
+        } else if (isAnalysisSheet) {
+          const isS3toS22 = (colIndex === 18 && rowIndex >= 2 && rowIndex <= 21);
+          const isU27 = (colIndex === 20 && rowIndex === 26);
+          isEditable = isS3toS22 || isU27;
+        }
+
         const readonlyAttr = isEditable ? '' : 'readonly';
-        const cursorStyle = isEditable ? 'cursor: text;' : 'cursor: not-allowed; opacity: 0.8;';
+        const cursorStyle = isEditable ? 'cursor: text; background-color: #ffffff !important;' : 'cursor: not-allowed; opacity: 0.95;';
 
         if (rowIndex === 0) {
           // 第一列 (標題列)
@@ -173,7 +186,7 @@ app.get('/', async (req, res) => {
           tableHtml += `<th style="padding: ${thPadding}; border: 1px solid #ccc; font-size: ${tableFontSize}; white-space: nowrap; ${stickyCss}">${headerText}</th>`;
         } else {
           // 一般資料列
-          // 🔍 如果是分析表且在 A3:N3 範圍 (rowIndex 2, colIndex 0~13)，放置篩選/排序介面
+          // 分析表 A3:N3 (rowIndex 2, colIndex 0~13) 篩選/排序介面 (跳過已隱藏的 B 欄)
           let filterHeaderHtml = '';
           if (isAnalysisSheet && rowIndex === 2 && colIndex <= 13) {
             filterHeaderHtml = `
@@ -191,7 +204,7 @@ app.get('/', async (req, res) => {
           } else {
             tableHtml += `
               <td style="padding: ${inputPadding}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss}">
-                <input type="text" class="cell-input" value="${cellValue}" ${readonlyAttr} style="width: 92%; min-width: ${minInputWidth}; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" />
+                <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="width: 92%; min-width: ${minInputWidth}; padding: ${inputPadding}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" />
               </td>`;
           }
         }
@@ -227,7 +240,6 @@ app.get('/', async (req, res) => {
           .save-btn { background-color: #28a745; color: white; font-size: 13px; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
           .save-btn:hover { background-color: #218838; }
           .save-btn:disabled { background-color: #6c757d; cursor: not-allowed; }
-          .reset-btn { background-color: #6c757d; color: white; font-size: 11px; padding: 4px 8px; border: none; border-radius: 3px; cursor: pointer; margin-left: 8px; }
           .nav-container { display: flex; gap: 6px; margin-bottom: 4px; overflow-x: auto; padding-bottom: 4px; white-space: nowrap; }
           
           /* 表格外框容器 */
@@ -248,7 +260,7 @@ app.get('/', async (req, res) => {
         <div class="sticky-top-bar">
           <div class="header-container">
             <h1 class="title">⚾ 9INNINGS CLUB 戰績表</h1>
-            ${isInputSheet ? '<button class="save-btn" onclick="saveData()">💾 儲存修改</button>' : '<span style="font-size:12px; color:#666; background:#e2e8f0; padding:4px 8px; border-radius:4px;">🔒 唯讀檢視</span>'}
+            ${(isInputSheet || isAnalysisSheet) ? '<button class="save-btn" onclick="saveData()">💾 儲存修改</button>' : '<span style="font-size:12px; color:#666; background:#e2e8f0; padding:4px 8px; border-radius:4px;">🔒 唯讀檢視</span>'}
           </div>
           
           <!-- 分頁標籤 -->
@@ -263,7 +275,7 @@ app.get('/', async (req, res) => {
         </div>
 
         <script>
-          // 🔍 前端動態篩選功能 (A3:N103 範圍)
+          // 🔍 前端動態篩選功能
           const activeFilters = {};
 
           function filterTable(colIndex, keyword) {
@@ -275,7 +287,6 @@ app.get('/', async (req, res) => {
             const table = document.getElementById('dataTable');
             const rows = Array.from(table.querySelectorAll('tr'));
 
-            // 資料列範圍 (Row index 3 至 102，即 Row 4~103)
             rows.forEach(tr => {
               const rIdx = parseInt(tr.getAttribute('data-row'));
               if (rIdx >= 3 && rIdx <= 102) {
@@ -283,11 +294,14 @@ app.get('/', async (req, res) => {
                 let isMatch = true;
 
                 for (const [cIdx, kw] of Object.entries(activeFilters)) {
-                  if (kw && inputs[cIdx]) {
-                    const val = inputs[cIdx].value.toLowerCase();
-                    if (!val.includes(kw)) {
-                      isMatch = false;
-                      break;
+                  if (kw) {
+                    const matchedInput = Array.from(inputs).find(inp => parseInt(inp.getAttribute('data-col')) === parseInt(cIdx));
+                    if (matchedInput) {
+                      const val = matchedInput.value.toLowerCase();
+                      if (!val.includes(kw)) {
+                        isMatch = false;
+                        break;
+                      }
                     }
                   }
                 }
@@ -296,20 +310,22 @@ app.get('/', async (req, res) => {
             });
           }
 
-          // ↕️ 前端動態排序功能 (僅重排畫面，不修改後端與 Google 試算表)
+          // ↕️ 前端動態排序功能
           function sortTable(colIndex, direction) {
             const table = document.getElementById('dataTable');
             const allRows = Array.from(table.querySelectorAll('tr'));
             
-            // 抓取 Row Index 3~102 (A4:N103) 進行排序
             const targetRows = allRows.filter(tr => {
               const rIdx = parseInt(tr.getAttribute('data-row'));
               return rIdx >= 3 && rIdx <= 102;
             });
 
             targetRows.sort((a, b) => {
-              const valA = (a.querySelectorAll('input')[colIndex]?.value || '').trim();
-              const valB = (b.querySelectorAll('input')[colIndex]?.value || '').trim();
+              const inputA = Array.from(a.querySelectorAll('input')).find(inp => parseInt(inp.getAttribute('data-col')) === colIndex);
+              const inputB = Array.from(b.querySelectorAll('input')).find(inp => parseInt(inp.getAttribute('data-col')) === colIndex);
+
+              const valA = (inputA?.value || '').trim();
+              const valB = (inputB?.value || '').trim();
 
               const numA = parseFloat(valA.replace('%', ''));
               const numB = parseFloat(valB.replace('%', ''));
@@ -324,7 +340,6 @@ app.get('/', async (req, res) => {
               return direction === 'asc' ? result : -result;
             });
 
-            // 將排序後的 DOM 節點重新串回表格底部
             const tbody = table.querySelector('tbody') || table;
             targetRows.forEach(tr => tbody.appendChild(tr));
           }
@@ -339,13 +354,26 @@ app.get('/', async (req, res) => {
             const table = document.getElementById('dataTable');
             const rows = Array.from(table.querySelectorAll('tr'));
             
+            // 構建完整欄位矩陣（若 Column B 隱藏則補回舊值或空值）
             const updatedValues = rows.map(tr => {
               const ths = tr.querySelectorAll('th');
               if (ths.length > 0) {
-                return Array.from(ths).map(th => th.innerText.trim());
+                const headerVals = Array.from(ths).map(th => th.innerText.trim());
+                if ("${isAnalysisSheet}" === "true") {
+                  headerVals.splice(1, 0, ""); // 補齊隱藏的 B 欄位置
+                }
+                return headerVals;
               }
               const inputs = tr.querySelectorAll('input');
-              return Array.from(inputs).map(input => input.value.trim());
+              const rowVals = [];
+              
+              // 補回隱藏的 B 欄，保持陣列與 Google 試算表 1:1 對齊
+              inputs.forEach(input => {
+                const cIdx = parseInt(input.getAttribute('data-col'));
+                rowVals[cIdx] = input.value.trim();
+              });
+
+              return rowVals;
             });
 
             try {
@@ -361,6 +389,7 @@ app.get('/', async (req, res) => {
               const result = await response.json();
               if (result.success) {
                 alert('✅ 修改已成功更新至 Google 試算表！');
+                location.reload(); // 儲存完畢自動刷新，更新公式計算結果與顏色
               } else {
                 alert('❌ 儲存失敗：' + result.error);
               }
@@ -388,31 +417,45 @@ app.post('/api/update', async (req, res) => {
     return res.status(400).json({ success: false, error: '缺少必要欄位' });
   }
 
-  // 🔒 後端權限檢查：非「輸入資料」分頁禁止寫入
-  if (!sheetName.includes("輸入資料")) {
-    return res.status(403).json({ success: false, error: '非權限分頁，禁止儲存！' });
+  // 🔒 允許更新「輸入資料」與「分析表」
+  const isInputSheet = sheetName.includes("輸入資料");
+  const isAnalysisSheet = sheetName.includes("分析表");
+
+  if (!isInputSheet && !isAnalysisSheet) {
+    return res.status(403).json({ success: false, error: '非可編輯分頁，禁止儲存！' });
   }
 
   try {
     const sheets = google.sheets({ version: 'v4', auth });
 
-    // 先讀取試算表中線上的原始資料（包含原本的公式）
+    // 先讀取試算表中線上的原始資料（包含原本的公式與數據）
     const existingRes = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `'${sheetName}'!A1:Z${values.length}`,
-      valueRenderOption: 'FORMULA' // 強制讀取原始公式而非計算後的值
+      valueRenderOption: 'FORMULA' // 強制讀取原始公式，避免純值覆蓋公式
     });
 
     const existingValues = existingRes.data.values || [];
 
-    // 🔒 安全保護：僅允許寫入 B2:J101，其他欄位與分頁保持試算表原本內容
+    // 🔒 依照分頁嚴格控管允許寫入的儲存格
     const safeValues = values.map((row, rIdx) => {
       return row.map((val, cIdx) => {
-        const isEditableCell = (rIdx >= 1 && rIdx <= 100) && (cIdx >= 1 && cIdx <= 9);
+        let isEditableCell = false;
+
+        if (isInputSheet) {
+          // 輸入資料分頁：B2:J101
+          isEditableCell = (rIdx >= 1 && rIdx <= 100) && (cIdx >= 1 && cIdx <= 9);
+        } else if (isAnalysisSheet) {
+          // 分析表分頁：S3:S22 (colIndex 18, rowIndex 2~21) 與 U27 (colIndex 20, rowIndex 26)
+          const isS3toS22 = (cIdx === 18 && rIdx >= 2 && rIdx <= 21);
+          const isU27 = (cIdx === 20 && rIdx === 26);
+          isEditableCell = isS3toS22 || isU27;
+        }
         
         if (isEditableCell) {
-          return val;
+          return val !== undefined ? val : '';
         } else {
+          // 非允許區塊維持線上原始內容/公式
           return (existingValues[rIdx] && existingValues[rIdx][cIdx] !== undefined) 
             ? existingValues[rIdx][cIdx] 
             : '';
