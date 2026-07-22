@@ -157,7 +157,7 @@ app.get('/', async (req, res) => {
             cellWidthStyle = 'min-width: 13px; width: 13px;';
             cellPaddingStyle = '1px 0px;';
           } else if ([2, 6, 7, 8].includes(colIndex)) {
-            // 🌟 C欄(2)、G欄(6)、H欄(7)、I欄(8)：縮小至極限
+            // C欄(2)、G欄(6)、H欄(7)、I欄(8)：維持緊湊
             cellWidthStyle = 'width: 1px; white-space: nowrap;';
             cellPaddingStyle = '1px 0px;';
           } else if (colIndex === 18) {
@@ -238,7 +238,7 @@ app.get('/', async (req, res) => {
                 </div>
               `;
             } else {
-              // C~N 欄：僅保留排序按鈕，縮小欄高
+              // C~N 欄：僅保留排序按鈕
               filterHeaderHtml = `
                 <div style="display:flex; align-items:center; justify-content:center; gap:1px; white-space: nowrap;">
                   <span style="font-weight:bold; font-size:8.8px;">${cellValue}</span>
@@ -253,10 +253,14 @@ app.get('/', async (req, res) => {
                 ${filterHeaderHtml}
               </td>`;
           } else {
-            const inputWidthStyle = [2, 6, 7, 8].includes(colIndex) ? 'width: 100%;' : 'width: 92%;';
+            // 🌟 C欄(2)、G欄(6)、H欄(7)、I欄(8)：輸入框設為 width:100% + box-sizing:border-box 填滿欄寬
+            const inputWidthCss = (isAnalysisSheet && [2, 6, 7, 8].includes(colIndex)) 
+              ? 'width: 100%; box-sizing: border-box;' 
+              : 'width: 92%;';
+
             tableHtml += `
               <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss}">
-                <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="${inputWidthStyle} ${cellWidthStyle} padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" oninput="handleInputLiveCalc(this, ${rowIndex}, ${colIndex})" />
+                <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="${inputWidthCss} padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" oninput="handleInputLiveCalc(this, ${rowIndex}, ${colIndex})" />
               </td>`;
           }
         }
