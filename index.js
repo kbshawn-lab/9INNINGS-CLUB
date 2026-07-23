@@ -398,7 +398,7 @@ app.get('/', async (req, res) => {
               
               if (inputL.value != newL) {
                 inputL.value = newL;
-                markEdited(inputL);
+                // 注意：L 欄是計算結果，不呼叫 markEdited，不會被傳回後端
               }
             }
           }
@@ -479,7 +479,11 @@ app.get('/', async (req, res) => {
 
             if (isInputSheet) {
               // 🌟 「輸入資料」分頁：只收集標記為 .is-edited 的修改資料
-              const editedInputs = Array.from(document.querySelectorAll('.cell-input.is-edited'));
+              // 並且排除非編輯範圍 (僅允許欄位索引 1~9，即 B 到 J 欄，確保絕不寫入 L 欄等公式)
+              const editedInputs = Array.from(document.querySelectorAll('.cell-input.is-edited')).filter(el => {
+                const colIndex = parseInt(el.getAttribute('data-col'));
+                return colIndex >= 1 && colIndex <= 9;
+              });
 
               if (editedInputs.length === 0) {
                 alert('ℹ️ 沒有檢測到任何修改內容。');
@@ -503,7 +507,7 @@ app.get('/', async (req, res) => {
                 changes: changes
               };
             } else {
-              // 分析表等其他分頁保持舊有整表打包方式
+              // 分析表等其他分頁保持原有整表處理邏輯
               const table = document.getElementById('dataTable');
               const rows = Array.from(table.querySelectorAll('tr'));
               
@@ -585,18 +589,29 @@ app.post('/api/update', async (req, res) => {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
 
-    // 🌟 部分更新（僅更新「輸入資料」中有修改的儲存格）
+    // 🌟 部分更新（僅更新「輸入資料」中有修改的儲存格，且後端嚴格限制只允許 B~J 欄）
     if (isPartialUpdate && Array.isArray(changes)) {
-      const dataUpdates = changes.map(item => {
+      const dataUpdates = [];
+
+      changes.forEach(item => {
+        // 雙重後端防護：確保絕對不會覆蓋 colIndex >= 10 (K欄、L欄及之後)
+        if (isInputSheet && (item.colIndex < 1 || item.colIndex > 9)) {
+          return;
+        }
+
         const colLetter = getColumnName(item.colIndex);
         const rowNumber = item.rowIndex + 1; // Google Sheet 為 1-based
         const range = `'${sheetName}'!${colLetter}${rowNumber}`;
 
-        return {
+        dataUpdates.push({
           range: range,
           values: [[item.value]]
-        };
+        });
       });
+
+      if (dataUpdates.length === 0) {
+        return res.json({ success: true, message: '無可更新的內容' });
+      }
 
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
@@ -606,10 +621,10 @@ app.post('/api/update', async (req, res) => {
         }
       });
 
-      return res.json({ success: true, message: `成功更新 ${changes.length} 個欄位` });
+      return res.json({ success: true, message: `成功更新 ${dataUpdates.length} 個欄位` });
     }
 
-    // 全表更新（提供給分析表等情況）
+    // 全表更新（提供給分析表等情況，採用 USER_ENTERED 保留原本公式語法）
     if (values) {
       const existingRes = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
