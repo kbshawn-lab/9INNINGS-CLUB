@@ -73,6 +73,18 @@ function getWColumnGradientColor(valStr) {
   return { bg: `rgb(${r}, ${g}, ${b})`, text: '#ffffff' };
 }
 
+// 數字轉為 A1 算式的字母欄位名稱 (例如 0 -> A, 11 -> L)
+function getColumnName(colIndex) {
+  let columnName = "";
+  let temp = colIndex + 1;
+  while (temp > 0) {
+    let rem = (temp - 1) % 26;
+    columnName = String.fromCharCode(65 + rem) + columnName;
+    temp = Math.floor((temp - rem) / 26);
+  }
+  return columnName;
+}
+
 // 🌐 1. 首頁
 app.get('/', async (req, res) => {
   const currentSheet = req.query.sheet || '';
@@ -271,7 +283,7 @@ app.get('/', async (req, res) => {
                 ${filterHeaderHtml}
               </td>`;
           } else {
-            // 🌟 判斷是否為「輸入資料」分頁的 I欄(colIndex 8) 或 J欄(colIndex 9) 的下拉選單 (列 2~101，即 rowIndex 1~100)
+            // 🌟 判斷是否為「輸入資料」分頁的 I欄(colIndex 8) 或 J欄(colIndex 9) 下拉選單
             const isDropdownI = isInputSheet && colIndex === 8 && rowIndex >= 1 && rowIndex <= 100;
             const isDropdownJ = isInputSheet && colIndex === 9 && rowIndex >= 1 && rowIndex <= 100;
 
@@ -280,7 +292,6 @@ app.get('/', async (req, res) => {
                 ? ['鬼才', '變化', '直球'] 
                 : ['變化', '直球'];
 
-              // 若目前沒有值，預設為第一個選項
               const currentVal = cellValue.toString().trim() || options[0];
 
               const optionsHtml = options.map(opt => {
@@ -290,7 +301,7 @@ app.get('/', async (req, res) => {
 
               tableHtml += `
                 <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss} ${cellWidthStyle}">
-                  <select class="cell-input" data-col="${colIndex}" style="width: 100%; padding: 1px 0; border: 1px solid #cbd5e1; border-radius: 3px; font-size: ${tableFontSize}; background-color: #ffffff; cursor: pointer; text-align: center;">
+                  <select class="cell-input" data-col="${colIndex}" data-original="${currentVal}" onchange="markEdited(this)" style="width: 100%; padding: 1px 0; border: 1px solid #cbd5e1; border-radius: 3px; font-size: ${tableFontSize}; background-color: #ffffff; cursor: pointer; text-align: center;">
                     ${optionsHtml}
                   </select>
                 </td>`;
@@ -301,7 +312,7 @@ app.get('/', async (req, res) => {
 
               tableHtml += `
                 <td class="table-cell" data-col="${colIndex}" style="padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; text-align: center; background-color: ${cellBgColor}; ${stickyCss} ${cellWidthStyle}">
-                  <input type="text" class="cell-input" data-col="${colIndex}" value="${cellValue}" ${readonlyAttr} style="${inputWidthCss} padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" oninput="handleInputLiveCalc(this, ${rowIndex}, ${colIndex})" />
+                  <input type="text" class="cell-input" data-col="${colIndex}" data-original="${cellValue}" value="${cellValue}" ${readonlyAttr} style="${inputWidthCss} padding: ${cellPaddingStyle}; border: 1px solid #cbd5e1; border-radius: 3px; text-align: center; font-size: ${tableFontSize}; background-color: ${cellInputBg}; ${cursorStyle} ${customTextColor}" oninput="handleInputLiveCalc(this, ${rowIndex}, ${colIndex}); markEdited(this);" />
                 </td>`;
             }
           }
@@ -331,6 +342,12 @@ app.get('/', async (req, res) => {
           .nav-container { display: flex; gap: 6px; margin-bottom: 4px; overflow-x: auto; padding-bottom: 4px; white-space: nowrap; }
           .card { background: white; padding: 0; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: auto; max-height: 80vh; -webkit-overflow-scrolling: touch; }
           .cell-input:focus:not([readonly]) { background-color: #fff !important; border-color: #003366 !important; outline: none; box-shadow: 0 0 3px rgba(0,51,102,0.4); }
+          
+          /* 🔴 編輯過的欄位顯示紅字 */
+          .cell-input.is-edited {
+            color: #dc3545 !important;
+            font-weight: bold !important;
+          }
         </style>
       </head>
       <body>
@@ -349,6 +366,20 @@ app.get('/', async (req, res) => {
         </div>
 
         <script>
+          // 🔴 只在「輸入資料」分頁進行紅字標記與變更追蹤
+          function markEdited(el) {
+            if ("${isInputSheet}" !== "true") return;
+
+            const originalVal = el.getAttribute('data-original') || '';
+            const currentVal = el.value.trim();
+
+            if (currentVal !== originalVal) {
+              el.classList.add('is-edited');
+            } else {
+              el.classList.remove('is-edited');
+            }
+          }
+
           function handleInputLiveCalc(inputEl, rowIndex, colIndex) {
             if (!"${isInputSheet}" || rowIndex < 1 || rowIndex > 100) return;
             if (colIndex !== 5 && colIndex !== 6) return;
@@ -363,7 +394,12 @@ app.get('/', async (req, res) => {
             if (inputF && inputG && inputL) {
               const valF = parseFloat(inputF.value) || 0;
               const valG = parseFloat(inputG.value) || 0;
-              inputL.value = valF - valG;
+              const newL = valF - valG;
+              
+              if (inputL.value != newL) {
+                inputL.value = newL;
+                markEdited(inputL);
+              }
             }
           }
 
@@ -427,6 +463,7 @@ app.get('/', async (req, res) => {
                 const inp = td.querySelector('.cell-input');
                 if (inp) {
                   inp.value = sortedRowData[cIdx] !== undefined ? sortedRowData[cIdx] : '';
+                  markEdited(inp);
                 }
               });
             });
@@ -435,41 +472,76 @@ app.get('/', async (req, res) => {
           async function saveData() {
             const btn = document.querySelector('.save-btn');
             if (!btn) return;
-            
-            btn.innerText = '⏳ 儲存中...';
-            btn.disabled = true;
 
-            const table = document.getElementById('dataTable');
-            const rows = Array.from(table.querySelectorAll('tr'));
+            const isInputSheet = "${isInputSheet}" === "true";
             
-            const updatedValues = rows.map(tr => {
-              const ths = tr.querySelectorAll('th');
-              if (ths.length > 0) {
-                const headerVals = Array.from(ths).map(th => th.innerText.trim());
-                if ("${isAnalysisSheet}" === "true") {
-                  headerVals.splice(1, 0, ""); // 補齊隱藏的 B 欄
-                }
-                return headerVals;
+            let payload = {};
+
+            if (isInputSheet) {
+              // 🌟 「輸入資料」分頁：只收集標記為 .is-edited 的修改資料
+              const editedInputs = Array.from(document.querySelectorAll('.cell-input.is-edited'));
+
+              if (editedInputs.length === 0) {
+                alert('ℹ️ 沒有檢測到任何修改內容。');
+                return;
               }
-              const inputs = tr.querySelectorAll('.cell-input');
-              const rowVals = [];
-              
-              inputs.forEach(input => {
-                const cIdx = parseInt(input.getAttribute('data-col'));
-                rowVals[cIdx] = input.value.trim();
+
+              const changes = editedInputs.map(el => {
+                const tr = el.closest('tr');
+                const rowIndex = parseInt(tr.getAttribute('data-row'));
+                const colIndex = parseInt(el.getAttribute('data-col'));
+                return {
+                  rowIndex: rowIndex,
+                  colIndex: colIndex,
+                  value: el.value.trim()
+                };
               });
 
-              return rowVals;
-            });
+              payload = {
+                sheetName: "${targetSheet}",
+                isPartialUpdate: true,
+                changes: changes
+              };
+            } else {
+              // 分析表等其他分頁保持舊有整表打包方式
+              const table = document.getElementById('dataTable');
+              const rows = Array.from(table.querySelectorAll('tr'));
+              
+              const updatedValues = rows.map(tr => {
+                const ths = tr.querySelectorAll('th');
+                if (ths.length > 0) {
+                  const headerVals = Array.from(ths).map(th => th.innerText.trim());
+                  if ("${isAnalysisSheet}" === "true") {
+                    headerVals.splice(1, 0, ""); // 補齊隱藏的 B 欄
+                  }
+                  return headerVals;
+                }
+                const inputs = tr.querySelectorAll('.cell-input');
+                const rowVals = [];
+                
+                inputs.forEach(input => {
+                  const cIdx = parseInt(input.getAttribute('data-col'));
+                  rowVals[cIdx] = input.value.trim();
+                });
+
+                return rowVals;
+              });
+
+              payload = {
+                sheetName: "${targetSheet}",
+                isPartialUpdate: false,
+                values: updatedValues
+              };
+            }
+
+            btn.innerText = '⏳ 儲存中...';
+            btn.disabled = true;
 
             try {
               const response = await fetch('/api/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  sheetName: "${targetSheet}",
-                  values: updatedValues
-                })
+                body: JSON.stringify(payload)
               });
 
               const result = await response.json();
@@ -497,9 +569,9 @@ app.get('/', async (req, res) => {
 
 // 📡 2. 寫回 Google 試算表 API
 app.post('/api/update', async (req, res) => {
-  const { sheetName, values } = req.body;
+  const { sheetName, isPartialUpdate, changes, values } = req.body;
 
-  if (!sheetName || !values) {
+  if (!sheetName) {
     return res.status(400).json({ success: false, error: '缺少必要欄位' });
   }
 
@@ -513,46 +585,75 @@ app.post('/api/update', async (req, res) => {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
 
-    const existingRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `'${sheetName}'!A1:Z${values.length}`,
-      valueRenderOption: 'FORMULA'
-    });
+    // 🌟 部分更新（僅更新「輸入資料」中有修改的儲存格）
+    if (isPartialUpdate && Array.isArray(changes)) {
+      const dataUpdates = changes.map(item => {
+        const colLetter = getColumnName(item.colIndex);
+        const rowNumber = item.rowIndex + 1; // Google Sheet 為 1-based
+        const range = `'${sheetName}'!${colLetter}${rowNumber}`;
 
-    const existingValues = existingRes.data.values || [];
+        return {
+          range: range,
+          values: [[item.value]]
+        };
+      });
 
-    const safeValues = values.map((row, rIdx) => {
-      return row.map((val, cIdx) => {
-        let isEditableCell = false;
-
-        if (isInputSheet) {
-          isEditableCell = (rIdx >= 1 && rIdx <= 100) && (cIdx >= 1 && cIdx <= 9);
-        } else if (isAnalysisSheet) {
-          const isS3toS22 = (cIdx === 18 && rIdx >= 2 && rIdx <= 21);
-          const isU27 = (cIdx === 20 && rIdx === 26);
-          isEditableCell = isS3toS22 || isU27;
-        }
-        
-        if (isEditableCell) {
-          return val !== undefined ? val : '';
-        } else {
-          return (existingValues[rIdx] && existingValues[rIdx][cIdx] !== undefined) 
-            ? existingValues[rIdx][cIdx] 
-            : '';
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: dataUpdates
         }
       });
-    });
-    
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `'${sheetName}'!A1:Z${safeValues.length}`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: safeValues,
-      },
-    });
 
-    res.json({ success: true, message: '更新成功' });
+      return res.json({ success: true, message: `成功更新 ${changes.length} 個欄位` });
+    }
+
+    // 全表更新（提供給分析表等情況）
+    if (values) {
+      const existingRes = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${sheetName}'!A1:Z${values.length}`,
+        valueRenderOption: 'FORMULA'
+      });
+
+      const existingValues = existingRes.data.values || [];
+
+      const safeValues = values.map((row, rIdx) => {
+        return row.map((val, cIdx) => {
+          let isEditableCell = false;
+
+          if (isInputSheet) {
+            isEditableCell = (rIdx >= 1 && rIdx <= 100) && (cIdx >= 1 && cIdx <= 9);
+          } else if (isAnalysisSheet) {
+            const isS3toS22 = (cIdx === 18 && rIdx >= 2 && rIdx <= 21);
+            const isU27 = (cIdx === 20 && rIdx === 26);
+            isEditableCell = isS3toS22 || isU27;
+          }
+          
+          if (isEditableCell) {
+            return val !== undefined ? val : '';
+          } else {
+            return (existingValues[rIdx] && existingValues[rIdx][cIdx] !== undefined) 
+              ? existingValues[rIdx][cIdx] 
+              : '';
+          }
+        });
+      });
+      
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${sheetName}'!A1:Z${safeValues.length}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: safeValues,
+        },
+      });
+
+      return res.json({ success: true, message: '全表更新成功' });
+    }
+
+    res.status(400).json({ success: false, error: '未提供可更新的資料' });
   } catch (error) {
     console.error("更新失敗:", error);
     res.status(500).json({ success: false, error: error.message });
