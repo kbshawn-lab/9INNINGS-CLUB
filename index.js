@@ -245,6 +245,7 @@ app.get('/', async (req, res) => {
 
         let isEditable = false;
         if (isInputSheet) {
+          // 🛑 嚴格防禦：只有 B~J 欄 (colIndex 1~9) 可編輯，絕對排除 L 欄 (colIndex 11)
           isEditable = (rowIndex >= 1 && rowIndex <= 100) && (colIndex >= 1 && colIndex <= 9);
         } else if (isAnalysisSheet) {
           const isS3toS22 = (colIndex === 18 && rowIndex >= 2 && rowIndex <= 21);
@@ -366,9 +367,13 @@ app.get('/', async (req, res) => {
         </div>
 
         <script>
-          // 🔴 只在「輸入資料」分頁進行紅字標記與變更追蹤
+          // 🔴 只在「輸入資料」分頁進行紅字標記與變更追蹤，且排除 L 欄
           function markEdited(el) {
             if ("${isInputSheet}" !== "true") return;
+
+            const colIndex = parseInt(el.getAttribute('data-col'));
+            // 防禦 1：如果是 L 欄或非可編輯區域，絕不上標記
+            if (colIndex < 1 || colIndex > 9) return;
 
             const originalVal = el.getAttribute('data-original') || '';
             const currentVal = el.value.trim();
@@ -398,7 +403,8 @@ app.get('/', async (req, res) => {
               
               if (inputL.value != newL) {
                 inputL.value = newL;
-                // 注意：L 欄是計算結果，不呼叫 markEdited，不會被傳回後端
+                // 純前端顯示計算結果，絕對不要加上 is-edited
+                inputL.classList.remove('is-edited');
               }
             }
           }
@@ -478,11 +484,10 @@ app.get('/', async (req, res) => {
             let payload = {};
 
             if (isInputSheet) {
-              // 🌟 「輸入資料」分頁：只收集標記為 .is-edited 的修改資料
-              // 並且排除非編輯範圍 (僅允許欄位索引 1~9，即 B 到 J 欄，確保絕不寫入 L 欄等公式)
+              // 🌟 核心嚴格過濾：僅抓取 class 含有 is-edited 且 colIndex 在 1~9 (B~J 欄) 的欄位
               const editedInputs = Array.from(document.querySelectorAll('.cell-input.is-edited')).filter(el => {
-                const colIndex = parseInt(el.getAttribute('data-col'));
-                return colIndex >= 1 && colIndex <= 9;
+                const cIdx = parseInt(el.getAttribute('data-col'));
+                return cIdx >= 1 && cIdx <= 9;
               });
 
               if (editedInputs.length === 0) {
@@ -507,7 +512,7 @@ app.get('/', async (req, res) => {
                 changes: changes
               };
             } else {
-              // 分析表等其他分頁保持原有整表處理邏輯
+              // 分析表等其他分頁保持舊有邏輯
               const table = document.getElementById('dataTable');
               const rows = Array.from(table.querySelectorAll('tr'));
               
@@ -516,7 +521,7 @@ app.get('/', async (req, res) => {
                 if (ths.length > 0) {
                   const headerVals = Array.from(ths).map(th => th.innerText.trim());
                   if ("${isAnalysisSheet}" === "true") {
-                    headerVals.splice(1, 0, ""); // 補齊隱藏的 B 欄
+                    headerVals.splice(1, 0, ""); 
                   }
                   return headerVals;
                 }
@@ -589,12 +594,13 @@ app.post('/api/update', async (req, res) => {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
 
-    // 🌟 部分更新（僅更新「輸入資料」中有修改的儲存格，且後端嚴格限制只允許 B~J 欄）
+    // 🌟 部分更新（「輸入資料」分頁專用，只更新有修改的儲存格）
     if (isPartialUpdate && Array.isArray(changes)) {
       const dataUpdates = [];
 
       changes.forEach(item => {
-        // 雙重後端防護：確保絕對不會覆蓋 colIndex >= 10 (K欄、L欄及之後)
+        // 🛡️ 後端二道牆防禦：若為輸入資料分頁，只允許 colIndex 在 1~9 (B~J欄)
+        // 強制排除 L 欄 (colIndex 11) 或任何其他欄位，防止覆蓋公式
         if (isInputSheet && (item.colIndex < 1 || item.colIndex > 9)) {
           return;
         }
@@ -624,7 +630,7 @@ app.post('/api/update', async (req, res) => {
       return res.json({ success: true, message: `成功更新 ${dataUpdates.length} 個欄位` });
     }
 
-    // 全表更新（提供給分析表等情況，採用 USER_ENTERED 保留原本公式語法）
+    // 全表更新（提供給分析表等情況，採用 FORMULA 保留原本公式語法）
     if (values) {
       const existingRes = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
